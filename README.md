@@ -157,40 +157,101 @@ tail -f ~/Library/Logs/voice-input.log
 
 ---
 
-## Проблемы
+## Диагностика
+
+Перед тем как разбираться вручную — посмотрите лог:
+```bash
+tail -40 ~/Library/Logs/voice-input.log
+```
+
+### Дерево проблем
+
+```
+Нажал горячую клавишу — ничего не происходит
+├── Нет уведомления "🎙 Запись" и нет строки в логе
+│   └── Агент не запущен → launchctl list | grep voice.agent
+│       ├── Не появляется → launchctl load ~/Library/LaunchAgents/com.ri.voice.agent.plist
+│       └── Есть, но падает → см. "Агент падает при старте" ниже
+│
+└── Лог есть, уведомлений нет
+    └── Уведомления заблокированы → см. "Уведомления не появляются" ниже
+
+Запись идёт (уведомление "🎙 Запись") — нажал снова — текст не вставился
+├── В логе: "Слишком тихо"
+│   └── Уменьшить min_volume в config.json (попробовать 0.001)
+│
+├── В логе: "Тишина" (Whisper ничего не распознал)
+│   └── Проверить: говорили ли вы после уведомления о начале записи
+│
+├── В логе: "Paste: OK" — но текст не появился в приложении
+│   └── Не выдано Accessibility для Python.app → см. "Текст не вставляется" ниже
+│
+└── В логе: ошибка "Operation not permitted" или нет строки Paste вообще
+    └── Python.app не имеет Full Disk Access или Accessibility → перепроверить разрешения
+```
+
+---
+
+### Агент падает при старте
+
+```bash
+# Смотреть оба лога
+cat /tmp/voice-input-launchd.log
+tail -20 ~/Library/Logs/voice-input.log
+```
+
+| Ошибка в логе | Причина | Решение |
+|---|---|---|
+| `No module named 'faster_whisper'` | Зависимости не установлены | `pip3 install faster-whisper sounddevice numpy pyobjc-framework-Quartz pyobjc-framework-Cocoa pyobjc-framework-UserNotifications pyobjc-framework-AVFoundation soundfile` |
+| `No module named 'numpy'` или numpy crash | Сломан numpy (часто на Python 3.13) | `pip3 install numpy --force-reinstall` |
+| `clang: error` при install.sh | Нет Xcode CLI Tools | `xcode-select --install` |
+| `exit code 78` в launchctl | StandardOutPath в недоступной папке | Убрать StandardOutPath из plist или изменить на `/tmp/` |
+| Два экземпляра → throttle | Предыдущий процесс завис | `pkill -f voice_input.py` затем перезапустить агент |
 
 ### Текст не вставляется
 
-Не выдано разрешение Accessibility для Python.app. Смотри раздел выше.
+Разрешение Accessibility не выдано Python.app.
 
-### Микрофон не работает (нет записи)
+1. Открыть `System Settings → Privacy & Security → Accessibility`
+2. Нажать `+`, найти Python.app по пути:
+   ```
+   /Library/Frameworks/Python.framework/Versions/3.XX/Resources/Python.app
+   ```
+   (замените XX на вашу версию — 13, 12 или 11)
+3. Перезапустить агент:
+   ```bash
+   launchctl kill SIGTERM gui/$(id -u)/com.ri.voice.agent
+   ```
 
-Не выдано разрешение Microphone для VoiceInput.app. Откройте вручную:
-```bash
-open ~/Applications/VoiceInput.app
-```
+Если путь не находится через диалог — перетащите файл прямо из Finder.
+
+### Микрофон не работает
+
+В логе появится: `[Errno -9999] Unanticipated host error` или запись стартует, но аудио пустое.
+
+1. Открыть VoiceInput.app вручную: `open ~/Applications/VoiceInput.app`
+2. macOS должен показать запрос на микрофон — нажать «Разрешить»
+3. Если запрос не появился: `System Settings → Privacy & Security → Microphone` → добавить VoiceInput.app вручную
+
+Если используется Homebrew Python (не с python.org) — микрофон может не работать вообще, потому что TCC привязывается к bundle ID. Решение: установить Python с [python.org](https://python.org/downloads/) и запустить `install.sh` снова.
 
 ### Уведомления не появляются
 
-1. `System Settings → Notifications → Python` → включить
-2. Если Sleep/DND — добавить Python в разрешённые приложения для нужного режима Focus
+1. `System Settings → Notifications → Python` → включить уведомления
+2. Если включены, но не пробивают режим «Не беспокоить» / Sleep:
+   `System Settings → Focus → [ваш режим] → Разрешённые уведомления → Программы → добавить Python`
 
-### Агент стартует, но сразу падает
-
-Смотрите `/tmp/voice-input-launchd.log` и `~/Library/Logs/voice-input.log`.
-
-Частые причины:
-- numpy не установлен или сломан → `pip3 install numpy --force-reinstall`
-- Python 3.13 + старый numpy → обновить все пакеты
-- Нет Xcode CLI tools → `xcode-select --install`
+Проверить что DND не блокирует — в логе каждое уведомление пишет статус:
+```
+[10:15:03] notify: 🎙 Запись | ... | ✅ Focus/DND выкл     ← уведомление должно было прийти
+[22:41:07] notify: 🎙 Запись | ... | ⛔ расписание DND (22:00–07:00)  ← заблокировано расписанием
+```
 
 ### Зависает длинный текст в терминале
 
-Это известная особенность некоторых терминалов (Cursor/xterm.js). Текст автоматически разбивается на куски по 400 символов — должно помогать. Если нет — уменьшите в `voice_input.py` константу `CHUNK_SIZE = 400`.
-
-### Homebrew Python и микрофон
-
-Если Python установлен через Homebrew (не с python.org), macOS может не давать ему разрешение на микрофон через VoiceInput.app, потому что TCC привязывается к bundle ID приложения. Рекомендуется установить Python с [python.org](https://python.org/downloads/).
+Известная особенность Cursor и некоторых других терминалов (xterm.js). Текст автоматически режется на куски по 400 символов — обычно помогает. Если нет:
+- Уменьшить `CHUNK_SIZE = 400` в `voice_input.py` до 200
+- Или вставлять не в терминал, а в текстовый редактор
 
 ---
 
