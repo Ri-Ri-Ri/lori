@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-Voice Input — голосовой ввод через faster-whisper.
-Триггер: touch /tmp/voice-input-toggle (из Shortcuts или любого скрипта).
-Расшифровка локальная, в сеть ничего не уходит.
-"""
 import fcntl
 import json
 import os
@@ -13,17 +8,10 @@ import threading
 import time
 from pathlib import Path
 
-# --- Пути (определяются динамически, без хардкодов) -------------------------
-_HOME = Path.home()
-_LOG_DIR = _HOME / "Library" / "Logs"
-_LOG_DIR.mkdir(parents=True, exist_ok=True)
-_LOG_PATH = _LOG_DIR / "voice-input.log"
-_TEMP_DIR = _HOME / ".voice-input" / "temp"
-_TEMP_DIR.mkdir(parents=True, exist_ok=True)
-
 # Самое раннее логирование — до всего остального
+_EARLY_LOG = Path.home() / "Desktop" / "cursor" / "logs" / "voice-input.log"
 try:
-    with open(_LOG_PATH, "a") as _f:
+    with open(_EARLY_LOG, "a") as _f:
         _f.write(f"[{time.strftime('%H:%M:%S')}] === START (pid={os.getpid()}) ===\n")
 except Exception:
     pass
@@ -33,14 +21,15 @@ import sounddevice as sd
 from faster_whisper import WhisperModel
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
-LOG_PATH = _LOG_PATH
+LOG_PATH = Path(__file__).parent.parent.parent / "logs" / "voice-input.log"
+CLIPS_DIR = Path(__file__).parent.parent.parent / "temp" / "voice-clips"
 
 DEFAULT_CONFIG = {
     "model": "medium",
     "language": "ru",
     "sample_rate": 16000,
     "min_volume": 0.02,
-    "debounce_seconds": 0.3,
+    "debounce_seconds": 1.0,
 }
 
 STATE_IDLE = "idle"
@@ -181,9 +170,23 @@ class VoiceInput:
         except Exception as e:
             log(f"Микрофон: {e}")
 
+        self._cleanup_old_clips()
+
         log(f"Загружаю модель {config['model']}...")
         self.model = WhisperModel(config["model"], device="cpu", compute_type="int8")
         log("Готово. Жду триггера.")
+
+    def _cleanup_old_clips(self):
+        import datetime
+        CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+        cutoff = time.time() - 7 * 24 * 3600
+        for f in CLIPS_DIR.glob("voice-clipped-*.wav"):
+            if f.stat().st_mtime < cutoff:
+                try:
+                    f.unlink()
+                    log(f"Удалён старый клип: {f.name}")
+                except Exception:
+                    pass
 
     def toggle(self):
         now = time.time()
@@ -258,14 +261,14 @@ class VoiceInput:
                 log("Слишком тихо")
                 notify("Voice Input", "Слишком тихо")
                 return
+            # normalize audio to [-1, 1] to protect against clipping/overload
             if max_vol > 1.0:
-                import datetime
-                save_path = str(_TEMP_DIR / f"voice-clipped-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.wav")
+                import soundfile as sf, datetime
+                save_path = CLIPS_DIR / f"voice-clipped-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
                 try:
-                    import soundfile as sf
                     sf.write(save_path, audio / max_vol, self.config["sample_rate"])
                     log(f"Аномальная громкость ({max_vol:.1f}) — сохранил аудио: {save_path}")
-                    notify("⚠️ Перегрузка", "Сохранил аудио в temp для повтора")
+                    notify("⚠️ Перегрузка", f"Сохранил аудио в temp для повтора")
                 except Exception as save_err:
                     log(f"Не удалось сохранить аудио: {save_err}")
                 audio = audio / max_vol
