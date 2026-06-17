@@ -283,8 +283,11 @@ class VoiceInput:
                 vad_filter=True,
                 condition_on_previous_text=False,
                 no_speech_threshold=0.6,
+                log_prob_threshold=-1.0,
             )
-            text = " ".join(s.text.strip() for s in list(segments)).strip()
+            text = " ".join(
+                s.text.strip() for s in list(segments) if s.no_speech_prob < 0.6
+            ).strip()
             log(f"Текст: '{text}'")
             if text:
                 paste_text(text)
