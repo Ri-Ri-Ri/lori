@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 # Самое раннее логирование — до всего остального
-_EARLY_LOG = Path.home() / "Desktop" / "cursor" / "logs" / "voice-input.log"
+_EARLY_LOG = Path(__file__).parent / "voice-input.log"
 try:
     with open(_EARLY_LOG, "a") as _f:
         _f.write(f"[{time.strftime('%H:%M:%S')}] === START (pid={os.getpid()}) ===\n")
@@ -265,17 +265,24 @@ class VoiceInput:
             if max_vol > 1.0:
                 import soundfile as sf, datetime
                 save_path = CLIPS_DIR / f"voice-clipped-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+                # Нормализуем по 99й перцентили, а не по пику — иначе один удар/клик
+                # делает всю речь неслышимой после нормализации
+                p99 = float(np.percentile(np.abs(audio), 99))
+                scale = p99 * 3 if p99 > 0 else max_vol
+                audio_norm = np.clip(audio, -scale, scale) / scale
                 try:
-                    sf.write(save_path, audio / max_vol, self.config["sample_rate"])
+                    sf.write(save_path, audio_norm, self.config["sample_rate"])
                     log(f"Аномальная громкость ({max_vol:.1f}) — сохранил аудио: {save_path}")
-                    notify("⚠️ Перегрузка", f"Сохранил аудио в temp для повтора")
+                    notify("⚠️ Перегрузка", "Сохранил аудио в temp для повтора")
                 except Exception as save_err:
                     log(f"Не удалось сохранить аудио: {save_err}")
-                audio = audio / max_vol
+                audio = audio_norm
             segments, _ = self.model.transcribe(
                 audio,
                 language=self.config["language"],
                 vad_filter=True,
+                condition_on_previous_text=False,
+                no_speech_threshold=0.6,
             )
             text = " ".join(s.text.strip() for s in list(segments)).strip()
             log(f"Текст: '{text}'")
