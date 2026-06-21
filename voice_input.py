@@ -17,15 +17,15 @@ except Exception:
     pass
 
 import numpy as np
+import soundfile as sf
 import sounddevice as sd
-from faster_whisper import WhisperModel
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
-LOG_PATH = Path(__file__).parent.parent.parent / "logs" / "voice-input.log"
-CLIPS_DIR = Path(__file__).parent.parent.parent / "temp" / "voice-clips"
+LOG_PATH = Path(__file__).parent / "voice-input.log"
+CLIPS_DIR = Path(__file__).parent / "voice-clips"
+KESHA_BIN = Path.home() / ".bun" / "bin" / "kesha"
 
 DEFAULT_CONFIG = {
-    "model": "medium",
     "language": "ru",
     "sample_rate": 16000,
     "min_volume": 0.02,
@@ -172,8 +172,8 @@ class VoiceInput:
 
         self._cleanup_old_clips()
 
-        log(f"Загружаю модель {config['model']}...")
-        self.model = WhisperModel(config["model"], device="cpu", compute_type="int8")
+        if not KESHA_BIN.exists():
+            raise RuntimeError(f"kesha не найден: {KESHA_BIN} (bun add -g @drakulavich/kesha-voice-kit && kesha install)")
         log("Готово. Жду триггера.")
 
     def _cleanup_old_clips(self):
@@ -263,31 +263,24 @@ class VoiceInput:
                 return
             # normalize audio to [-1, 1] to protect against clipping/overload
             if max_vol > 1.0:
-                import soundfile as sf, datetime
-                save_path = CLIPS_DIR / f"voice-clipped-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
                 # Нормализуем по 99й перцентили, а не по пику — иначе один удар/клик
                 # делает всю речь неслышимой после нормализации
                 p99 = float(np.percentile(np.abs(audio), 99))
                 scale = p99 * 3 if p99 > 0 else max_vol
-                audio_norm = np.clip(audio, -scale, scale) / scale
-                try:
-                    sf.write(save_path, audio_norm, self.config["sample_rate"])
-                    log(f"Аномальная громкость ({max_vol:.1f}) — сохранил аудио: {save_path}")
-                    notify("⚠️ Перегрузка", "Сохранил аудио в temp для повтора")
-                except Exception as save_err:
-                    log(f"Не удалось сохранить аудио: {save_err}")
-                audio = audio_norm
-            segments, _ = self.model.transcribe(
-                audio,
-                language=self.config["language"],
-                vad_filter=True,
-                condition_on_previous_text=False,
-                no_speech_threshold=0.6,
-                log_prob_threshold=-1.0,
+                audio = np.clip(audio, -scale, scale) / scale
+                log(f"Аномальная громкость ({max_vol:.1f}) — нормализовал")
+
+            import datetime
+            wav_path = CLIPS_DIR / f"voice-clipped-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+            sf.write(wav_path, audio, self.config["sample_rate"])
+
+            result = subprocess.run(
+                [str(KESHA_BIN), "-q", "--lang", self.config["language"], str(wav_path)],
+                capture_output=True, text=True, timeout=30,
             )
-            text = " ".join(
-                s.text.strip() for s in list(segments) if s.no_speech_prob < 0.6
-            ).strip()
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip() or f"kesha exit {result.returncode}")
+            text = result.stdout.strip()
             log(f"Текст: '{text}'")
             if text:
                 paste_text(text)

@@ -55,11 +55,10 @@ INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL}"
 mkdir -p "$INSTALL_DIR"
 ok "Папка: $INSTALL_DIR"
 
-# ── 3. Зависимости ───────────────────────────────────────────
+# ── 3. Зависимости Python ─────────────────────────────────────
 step "Устанавливаю Python-зависимости..."
 "$PYTHON_BIN" -m pip install --quiet --upgrade pip
 "$PYTHON_BIN" -m pip install --quiet \
-    faster-whisper \
     sounddevice \
     numpy \
     pyobjc-framework-AVFoundation \
@@ -69,11 +68,24 @@ step "Устанавливаю Python-зависимости..."
     soundfile
 ok "Зависимости установлены."
 
-# ── 4. Скачиваю модель Whisper заранее ───────────────────────
-step "Загружаю модель Whisper medium (~1.5 GB)..."
-echo "   Это займёт несколько минут при первом запуске."
-"$PYTHON_BIN" -c "from faster_whisper import WhisperModel; WhisperModel('medium', device='cpu', compute_type='int8'); print('Модель готова.')" \
-    || warn "Модель загрузится при первом запуске. Продолжаем."
+# ── 4. Kesha Voice Kit (распознавание речи) ───────────────────
+step "Устанавливаю Kesha Voice Kit (Bun + движок + модели)..."
+
+if ! command -v bun >/dev/null 2>&1; then
+    if command -v brew >/dev/null 2>&1; then
+        brew install oven-sh/bun/bun
+    else
+        curl -fsSL https://bun.sh/install | bash
+        export PATH="$HOME/.bun/bin:$PATH"
+    fi
+fi
+ok "Bun: $(bun --version)"
+
+bun add -g @drakulavich/kesha-voice-kit
+ok "Kesha CLI установлен."
+
+echo "   Скачиваю движок и модели (~2.5 GB, разово)..."
+"$HOME/.bun/bin/kesha" install || warn "kesha install не прошёл — запустите вручную: kesha install"
 
 # ── 5. Копирую файлы ─────────────────────────────────────────
 step "Копирую файлы в $INSTALL_DIR..."

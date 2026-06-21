@@ -1,5 +1,4 @@
 {
-  "model": "medium",
   "language": "ru",
   "sample_rate": 16000,
   "debounce_seconds": 0.3,
