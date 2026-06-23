@@ -16,14 +16,17 @@ try:
 except Exception:
     pass
 
+os.environ["HF_HOME"] = str(Path(__file__).parent / "models")
+
 import numpy as np
 import soundfile as sf
 import sounddevice as sd
+import mlx_whisper
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 LOG_PATH = Path(__file__).parent / "voice-input.log"
 CLIPS_DIR = Path(__file__).parent / "voice-clips"
-KESHA_BIN = Path.home() / ".bun" / "bin" / "kesha"
+MLX_WHISPER_MODEL = "mlx-community/whisper-medium-mlx"
 
 DEFAULT_CONFIG = {
     "language": "ru",
@@ -172,8 +175,12 @@ class VoiceInput:
 
         self._cleanup_old_clips()
 
-        if not KESHA_BIN.exists():
-            raise RuntimeError(f"kesha не найден: {KESHA_BIN} (bun add -g @drakulavich/kesha-voice-kit && kesha install)")
+        log(f"Прогреваю модель {MLX_WHISPER_MODEL}...")
+        mlx_whisper.transcribe(
+            np.zeros(16000, dtype=np.float32),
+            path_or_hf_repo=MLX_WHISPER_MODEL,
+            language=config["language"],
+        )
         log("Готово. Жду триггера.")
 
     def _cleanup_old_clips(self):
@@ -207,7 +214,7 @@ class VoiceInput:
 
         if action == "stop":
             log("→ стоп")
-            notify("⏹", "Расшифровываю...")
+            # notify("⏹", "Расшифровываю...")  # отключено: индикатора достаточно
             try:
                 stream_to_stop.stop()
                 stream_to_stop.close()
@@ -244,7 +251,7 @@ class VoiceInput:
             )
             self._stream.start()
             log("Запись началась")
-            notify("🎙 Запись", "Говори. Нажми кнопку чтобы остановить")
+            # notify("🎙 Запись", "Говори. Нажми кнопку чтобы остановить")  # отключено: индикатора достаточно
         except Exception as e:
             log(f"Ошибка записи: {e}")
             self.state = STATE_IDLE
@@ -259,37 +266,35 @@ class VoiceInput:
             log(f"Громкость: max={max_vol:.3f}")
             if max_vol < self.config.get("min_volume", 0.02):
                 log("Слишком тихо")
-                notify("Voice Input", "Слишком тихо")
+                # notify("Voice Input", "Слишком тихо")  # отключено: индикатора достаточно
                 return
             # normalize audio to [-1, 1] to protect against clipping/overload
             if max_vol > 1.0:
+                import datetime
                 # Нормализуем по 99й перцентили, а не по пику — иначе один удар/клик
                 # делает всю речь неслышимой после нормализации
                 p99 = float(np.percentile(np.abs(audio), 99))
                 scale = p99 * 3 if p99 > 0 else max_vol
                 audio = np.clip(audio, -scale, scale) / scale
-                log(f"Аномальная громкость ({max_vol:.1f}) — нормализовал")
+                save_path = CLIPS_DIR / f"voice-clipped-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+                sf.write(save_path, audio, self.config["sample_rate"])
+                log(f"Аномальная громкость ({max_vol:.1f}) — нормализовал, сохранил: {save_path}")
 
-            import datetime
-            wav_path = CLIPS_DIR / f"voice-clipped-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
-            sf.write(wav_path, audio, self.config["sample_rate"])
-
-            result = subprocess.run(
-                [str(KESHA_BIN), "-q", "--lang", self.config["language"], str(wav_path)],
-                capture_output=True, text=True, timeout=30,
+            result = mlx_whisper.transcribe(
+                audio,
+                path_or_hf_repo=MLX_WHISPER_MODEL,
+                language=self.config["language"],
             )
-            if result.returncode != 0:
-                raise RuntimeError(result.stderr.strip() or f"kesha exit {result.returncode}")
-            text = result.stdout.strip()
+            text = result["text"].strip()
             log(f"Текст: '{text}'")
             if text:
                 paste_text(text)
-                notify("✅", text[:70])
+                # notify("✅", text[:70])  # отключено: индикатора достаточно
             else:
-                notify("Voice Input", "Тишина")
+                pass  # notify("Voice Input", "Тишина")  # отключено: индикатора достаточно
         except Exception as e:
             log(f"Ошибка расшифровки: {e}")
-            notify("❌ Ошибка", str(e)[:100])
+            # notify("❌ Ошибка", str(e)[:100])  # отключено: индикатора достаточно
         finally:
             with self._lock:
                 self.state = STATE_IDLE

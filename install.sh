@@ -65,27 +65,15 @@ step "Устанавливаю Python-зависимости..."
     pyobjc-framework-Cocoa \
     pyobjc-framework-Quartz \
     pyobjc-framework-UserNotifications \
-    soundfile
+    soundfile \
+    mlx-whisper
 ok "Зависимости установлены."
 
-# ── 4. Kesha Voice Kit (распознавание речи) ───────────────────
-step "Устанавливаю Kesha Voice Kit (Bun + движок + модели)..."
-
-if ! command -v bun >/dev/null 2>&1; then
-    if command -v brew >/dev/null 2>&1; then
-        brew install oven-sh/bun/bun
-    else
-        curl -fsSL https://bun.sh/install | bash
-        export PATH="$HOME/.bun/bin:$PATH"
-    fi
-fi
-ok "Bun: $(bun --version)"
-
-bun add -g @drakulavich/kesha-voice-kit
-ok "Kesha CLI установлен."
-
-echo "   Скачиваю движок и модели (~2.5 GB, разово)..."
-"$HOME/.bun/bin/kesha" install || warn "kesha install не прошёл — запустите вручную: kesha install"
+# ── 4. Модель mlx-whisper (распознавание речи) ─────────────────
+step "Модель mlx-whisper..."
+echo "   Модель mlx-community/whisper-medium-mlx (~1.4 GB) скачается автоматически"
+echo "   при первом запуске и закэшируется в models/ (HF_HOME) — разово."
+ok "Готово к первому запуску."
 
 # ── 5. Копирую файлы ─────────────────────────────────────────
 step "Копирую файлы в $INSTALL_DIR..."
