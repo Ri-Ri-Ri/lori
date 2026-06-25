@@ -98,7 +98,7 @@ cp "$SCRIPT_DIR/Lori.app/Contents/Info.plist" "$APP_DEST/Contents/"
 cp "$SCRIPT_DIR/assets/Lori.icns" "$APP_DEST/Contents/Resources/icon.icns"
 
 # Подставляю реальные пути в launcher.c
-LAUNCHER_TMP="/tmp/voice_launcher_$$.c"
+LAUNCHER_TMP="/tmp/lori_launcher_$$.c"
 sed \
     -e "s|PLACEHOLDER_PYTHON_BIN|${PYTHON_BIN}|g" \
     -e "s|PLACEHOLDER_SCRIPT_PATH|${INSTALL_DIR}/lori.py|g" \

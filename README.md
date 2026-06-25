@@ -108,7 +108,7 @@ macOS попросит разрешение на микрофон.
 └── Lori.app       — нужен только для разрешения на микрофон
 
 ~/Library/LaunchAgents/
-└── com.ri.voice.agent.plist  — автозапуск
+└── com.ri.lori.agent.plist  — автозапуск
 
 ~/Library/Logs/
 └── lori.log      — все события
@@ -143,16 +143,16 @@ macOS попросит разрешение на микрофон.
 
 ```bash
 # Посмотреть статус
-launchctl list | grep voice.agent
+launchctl list | grep lori.agent
 
 # Перезапустить
-launchctl kill SIGTERM gui/$(id -u)/com.ri.voice.agent
+launchctl kill SIGTERM gui/$(id -u)/com.ri.lori.agent
 
 # Остановить совсем
-launchctl unload ~/Library/LaunchAgents/com.ri.voice.agent.plist
+launchctl unload ~/Library/LaunchAgents/com.ri.lori.agent.plist
 
 # Запустить снова
-launchctl load ~/Library/LaunchAgents/com.ri.voice.agent.plist
+launchctl load ~/Library/LaunchAgents/com.ri.lori.agent.plist
 
 # Логи в реальном времени
 tail -f ~/Library/Logs/lori.log
@@ -172,8 +172,8 @@ tail -40 ~/Library/Logs/lori.log
 ```
 Нажал горячую клавишу — ничего не происходит
 ├── Нет уведомления "🎙 Запись" и нет строки в логе
-│   └── Агент не запущен → launchctl list | grep voice.agent
-│       ├── Не появляется → launchctl load ~/Library/LaunchAgents/com.ri.voice.agent.plist
+│   └── Агент не запущен → launchctl list | grep lori.agent
+│       ├── Не появляется → launchctl load ~/Library/LaunchAgents/com.ri.lori.agent.plist
 │       └── Есть, но падает → см. "Агент падает при старте" ниже
 │
 └── Лог есть, уведомлений нет
@@ -224,7 +224,7 @@ tail -20 ~/Library/Logs/lori.log
    (замените XX на вашу версию — 13, 12 или 11)
 3. Перезапустить агент:
    ```bash
-   launchctl kill SIGTERM gui/$(id -u)/com.ri.voice.agent
+   launchctl kill SIGTERM gui/$(id -u)/com.ri.lori.agent
    ```
 
 Если путь не находится через диалог — перетащите файл прямо из Finder.
@@ -300,8 +300,8 @@ Lori.app (bundle ID `com.ri.lori`) держит разрешение через 
 
 ```bash
 # Остановить и удалить агент
-launchctl unload ~/Library/LaunchAgents/com.ri.voice.agent.plist
-rm ~/Library/LaunchAgents/com.ri.voice.agent.plist
+launchctl unload ~/Library/LaunchAgents/com.ri.lori.agent.plist
+rm ~/Library/LaunchAgents/com.ri.lori.agent.plist
 
 # Удалить файлы (включая закэшированную модель mlx-whisper в models/)
 rm -rf ~/.lori
