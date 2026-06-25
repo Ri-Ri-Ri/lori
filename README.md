@@ -1,25 +1,25 @@
-# Lori — голосовой ввод для macOS
+# Lori — voice input for macOS
 
 ![Lori](assets/lori-github-banner-1280x640.png)
 
-Нажимаешь кнопку — говоришь — нажимаешь снова. Текст сам вставляется туда, где стоит курсор.
+Press a button — speak — press again. Text is pasted wherever your cursor is.
 
-**Расшифровка полностью локальная.** Ничего не уходит в сеть, не нужен API-ключ.
-
----
-
-## Что это
-
-- Записывает голос с микрофона
-- Расшифровывает через [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) (модель `mlx-community/whisper-medium-mlx`) — Whisper medium, ускоренный на Apple Neural Engine через MLX
-- Вставляет текст через буфер обмена (⌘V) в любое приложение
-- Работает в фоне, запускается автоматически при входе
-
-**Требования:** macOS 13+ (на Apple Silicon работает на Neural Engine, на Intel будет заметно медленнее), Python 3.11–3.13 (рекомендуется установить с [python.org](https://python.org/downloads/)), ~1.5 ГБ свободного места (модель mlx-whisper medium, кэшируется один раз).
+**Transcription is fully local.** Nothing leaves your machine. No API key needed.
 
 ---
 
-## Установка
+## What it does
+
+- Records audio from your microphone
+- Transcribes using [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) (model `mlx-community/whisper-medium-mlx`) — Whisper medium accelerated on Apple Neural Engine via MLX
+- Pastes text via clipboard (⌘V) into any application
+- Runs in the background, starts automatically at login
+
+**Requirements:** macOS 13+ (Apple Silicon runs on Neural Engine; Intel will be noticeably slower), Python 3.11–3.13 (recommended: install from [python.org](https://python.org/downloads/)), ~1.5 GB free disk space (mlx-whisper medium model, cached once).
+
+---
+
+## Installation
 
 ```bash
 git clone https://github.com/Ri-Ri-Ri/lori.git
@@ -27,291 +27,293 @@ cd lori
 bash install.sh
 ```
 
-Скрипт сам:
-- найдёт Python
-- установит зависимости (Python-пакеты, включая `mlx-whisper`)
-- скомпилирует вспомогательный .app
-- создаст launchd-агент (автозапуск)
+The script will:
+- find Python
+- install dependencies (Python packages including `mlx-whisper`)
+- compile the helper .app
+- create a launchd agent (auto-start)
 
-Модель mlx-whisper medium (~1.4 ГБ) скачается автоматически при первом запуске и закэшируется локально — один раз.
+The mlx-whisper medium model (~1.4 GB) downloads automatically on first run and is cached locally — only once.
 
-После установки нужно вручную выдать разрешения и настроить горячую клавишу — install.sh выведет инструкцию.
+After installation you need to manually grant permissions and set up a keyboard shortcut — install.sh will print the instructions.
 
 ---
 
-## Разрешения macOS (обязательно)
+## macOS Permissions (required)
 
-Без этих разрешений система не запустится.
+Without these the system won't work.
 
-### 1. Accessibility — чтобы вставлять текст
+### 1. Accessibility — to paste text
 
 `System Settings → Privacy & Security → Accessibility`
 
-Добавить `Python.app`. Путь обычно:
+Add `Python.app`. Path is usually:
 ```
 /Library/Frameworks/Python.framework/Versions/3.XX/Resources/Python.app
 ```
-(версию замените на свою, install.sh покажет точный путь)
+(replace XX with your version; install.sh will show the exact path)
 
-### 2. Microphone — чтобы записывать голос
+### 2. Microphone — to record audio
 
 `System Settings → Privacy & Security → Microphone`
 
-Добавить `Lori.app` (лежит в `~/Applications/`).
+Add `Lori.app` (located in `~/Applications/`).
 
-Если его нет в списке — откройте вручную:
+If it's not in the list — open it manually:
 ```bash
 open ~/Applications/Lori.app
 ```
-macOS попросит разрешение на микрофон.
+macOS will ask for microphone permission.
 
-### 3. Notifications — чтобы видеть уведомления
+### 3. Notifications — to see status notifications
 
-`System Settings → Notifications → Python` → включить.
+`System Settings → Notifications → Python` → enable.
 
-Если уведомления не пробивают режим «Не беспокоить»:
-`System Settings → Focus → Сон → Разрешённые уведомления → Программы → Python`
+If notifications don't break through Do Not Disturb:
+`System Settings → Focus → Sleep → Allowed Notifications → Apps → Python`
 
 ---
 
-## Горячая клавиша
+## Keyboard shortcut
 
-Откройте **Shortcuts.app** (Быстрые команды):
+Open **Shortcuts.app**:
 
-1. Нажмите **+** → «Новая команда»
-2. Добавьте действие **«Выполнить сценарий оболочки»**
-3. Текст:
+1. Click **+** → New Shortcut
+2. Add action **Run Shell Script**
+3. Script:
    ```
    bash ~/.lori/toggle.sh
    ```
-   (замените путь если устанавливали в другое место)
-4. Назначьте клавишу: ⌥Space, Fn, или любую удобную
-5. Сохраните
+   (replace the path if you installed elsewhere)
+4. Assign a key: ⌥Space, Fn, or any key you prefer
+5. Save
 
-Первое нажатие — начало записи (уведомление 🎙 Запись).
-Второе нажатие — стоп + расшифровка + вставка.
+First press — start recording (🎙 Recording notification).
+Second press — stop + transcribe + paste.
 
 ---
 
-## Файлы
+## Files
 
-После установки:
+After installation:
 
 ```
 ~/.lori/
-├── lori.py       — основной скрипт
-├── config.json          — настройки
-├── toggle.sh            — триггер (вызывается из Shortcuts)
-└── models/              — кэш модели mlx-whisper (HF_HOME), ~1.4 ГБ, скачивается один раз
+├── lori.py              — main script
+├── config.json          — settings
+├── toggle.sh            — trigger (called from Shortcuts)
+└── models/              — mlx-whisper model cache (HF_HOME), ~1.4 GB, downloaded once
 
 ~/Applications/
-└── Lori.app       — нужен только для разрешения на микрофон
+└── Lori.app             — needed only for microphone permission
 
 ~/Library/LaunchAgents/
-└── com.ri.lori.agent.plist  — автозапуск
+└── com.ri.lori.agent.plist  — auto-start
 
 ~/Library/Logs/
-└── lori.log      — все события
+└── lori.log             — all events
 ```
 
 ---
 
-## Конфиг
+## Config
 
 `~/.lori/config.json`:
 
 ```json
 {
-  "language": "ru",
+  "language": "en",
   "sample_rate": 16000,
   "debounce_seconds": 0.3,
-  "min_volume": 0.005
+  "min_volume": 0.03
 }
 ```
 
-| Параметр | Значение | Описание |
+| Parameter | Value | Description |
 |---|---|---|
-| `language` | `"ru"` | Язык. `"en"`, `"uk"`, `"de"` и др. — Whisper поддерживает [~100 языков](https://github.com/openai/whisper#available-models-and-languages). |
-| `min_volume` | `0.005` | Порог тишины. Если не расшифровывает тихую речь — уменьшить. |
-| `debounce_seconds` | `0.3` | Защита от двойного срабатывания клавиши. |
+| `language` | `"en"` | Transcription language. Set to `"auto"` to let Whisper detect the language automatically. Supports [99 languages](https://github.com/openai/whisper#available-models-and-languages): `"ru"`, `"uk"`, `"de"`, `"fr"`, `"es"`, and more. |
+| `min_volume` | `0.03` | Silence threshold. If quiet speech isn't transcribed — lower this value. |
+| `debounce_seconds` | `0.3` | Protection against double-tap. |
 
-После изменения конфига — перезапустить агент.
+> **Auto-detect:** set `"language": "auto"` and Whisper will detect the language on every recording. Useful if you switch between languages often, but adds ~0.5s to transcription time.
+
+After changing config — restart the agent.
 
 ---
 
-## Управление агентом
+## Managing the agent
 
 ```bash
-# Посмотреть статус
+# Check status
 launchctl list | grep lori.agent
 
-# Перезапустить
+# Restart
 launchctl kill SIGTERM gui/$(id -u)/com.ri.lori.agent
 
-# Остановить совсем
+# Stop completely
 launchctl unload ~/Library/LaunchAgents/com.ri.lori.agent.plist
 
-# Запустить снова
+# Start again
 launchctl load ~/Library/LaunchAgents/com.ri.lori.agent.plist
 
-# Логи в реальном времени
+# Live logs
 tail -f ~/Library/Logs/lori.log
 ```
 
 ---
 
-## Диагностика
+## Troubleshooting
 
-Перед тем как разбираться вручную — посмотрите лог:
+Before digging in manually — check the log:
 ```bash
 tail -40 ~/Library/Logs/lori.log
 ```
 
-### Дерево проблем
+### Decision tree
 
 ```
-Нажал горячую клавишу — ничего не происходит
-├── Нет уведомления "🎙 Запись" и нет строки в логе
-│   └── Агент не запущен → launchctl list | grep lori.agent
-│       ├── Не появляется → launchctl load ~/Library/LaunchAgents/com.ri.lori.agent.plist
-│       └── Есть, но падает → см. "Агент падает при старте" ниже
+Pressed shortcut — nothing happens
+├── No "🎙 Recording" notification and nothing in the log
+│   └── Agent not running → launchctl list | grep lori.agent
+│       ├── Not found → launchctl load ~/Library/LaunchAgents/com.ri.lori.agent.plist
+│       └── Found but crashing → see "Agent crashes on start" below
 │
-└── Лог есть, уведомлений нет
-    └── Уведомления заблокированы → см. "Уведомления не появляются" ниже
+└── Log has entries, no notifications
+    └── Notifications blocked → see "Notifications not appearing" below
 
-Запись идёт (уведомление "🎙 Запись") — нажал снова — текст не вставился
-├── В логе: "Слишком тихо"
-│   └── Уменьшить min_volume в config.json (попробовать 0.001)
+Recording started (🎙 notification) — pressed again — text not pasted
+├── Log: "Too quiet"
+│   └── Lower min_volume in config.json (try 0.01)
 │
-├── В логе: "Тишина" (mlx-whisper ничего не распознал)
-│   └── Проверить: говорили ли вы после уведомления о начале записи
+├── Log: "Silence" (mlx-whisper recognized nothing)
+│   └── Check: did you speak after the recording started?
 │
-├── В логе: "Paste: OK" — но текст не появился в приложении
-│   └── Не выдано Accessibility для Python.app → см. "Текст не вставляется" ниже
+├── Log: "Paste: OK" — but text didn't appear
+│   └── Accessibility not granted for Python.app → see "Text not pasting" below
 │
-└── В логе: ошибка "Operation not permitted" или нет строки Paste вообще
-    └── Python.app не имеет Full Disk Access или Accessibility → перепроверить разрешения
+└── Log: error "Operation not permitted" or no Paste line at all
+    └── Python.app missing Accessibility → recheck permissions
 ```
 
 ---
 
-### Агент падает при старте
+### Agent crashes on start
 
 ```bash
-# Смотреть оба лога
+# Check both logs
 cat /tmp/lori-launchd.log
 tail -20 ~/Library/Logs/lori.log
 ```
 
-| Ошибка в логе | Причина | Решение |
+| Error in log | Cause | Fix |
 |---|---|---|
-| `No module named 'mlx_whisper'` | mlx-whisper не установлен | `pip3 install mlx-whisper` |
-| `No module named 'sounddevice'` (или другой пакет) | Python-зависимости не установлены | `pip3 install sounddevice numpy pyobjc-framework-Quartz pyobjc-framework-Cocoa pyobjc-framework-UserNotifications pyobjc-framework-AVFoundation soundfile mlx-whisper` |
-| `No module named 'numpy'` или numpy crash | Сломан numpy (часто на Python 3.13) | `pip3 install numpy --force-reinstall` |
-| `clang: error` при install.sh | Нет Xcode CLI Tools | `xcode-select --install` |
-| `exit code 78` в launchctl | StandardOutPath в недоступной папке | Убрать StandardOutPath из plist или изменить на `/tmp/` |
-| Два экземпляра → throttle | Предыдущий процесс завис | `pkill -f lori.py` затем перезапустить агент |
+| `No module named 'mlx_whisper'` | mlx-whisper not installed | `pip3 install mlx-whisper` |
+| `No module named 'sounddevice'` (or other package) | Python dependencies not installed | `pip3 install sounddevice numpy pyobjc-framework-Quartz pyobjc-framework-Cocoa pyobjc-framework-UserNotifications pyobjc-framework-AVFoundation soundfile mlx-whisper` |
+| `No module named 'numpy'` or numpy crash | Broken numpy (common on Python 3.13) | `pip3 install numpy --force-reinstall` |
+| `clang: error` during install.sh | No Xcode CLI Tools | `xcode-select --install` |
+| `exit code 78` in launchctl | StandardOutPath in inaccessible folder | Remove StandardOutPath from plist or change it to `/tmp/` |
+| Two instances → throttle | Previous process hung | `pkill -f lori.py` then restart agent |
 
-### Текст не вставляется
+### Text not pasting
 
-Разрешение Accessibility не выдано Python.app.
+Accessibility permission not granted for Python.app.
 
-1. Открыть `System Settings → Privacy & Security → Accessibility`
-2. Нажать `+`, найти Python.app по пути:
+1. Open `System Settings → Privacy & Security → Accessibility`
+2. Click `+`, find Python.app at path:
    ```
    /Library/Frameworks/Python.framework/Versions/3.XX/Resources/Python.app
    ```
-   (замените XX на вашу версию — 13, 12 или 11)
-3. Перезапустить агент:
+   (replace XX with your version — 13, 12 or 11)
+3. Restart the agent:
    ```bash
    launchctl kill SIGTERM gui/$(id -u)/com.ri.lori.agent
    ```
 
-Если путь не находится через диалог — перетащите файл прямо из Finder.
+If the path isn't found via the dialog — drag the file directly from Finder.
 
-### Микрофон не работает
+### Microphone not working
 
-В логе появится: `[Errno -9999] Unanticipated host error` или запись стартует, но аудио пустое.
+The log will show: `[Errno -9999] Unanticipated host error` or recording starts but audio is empty.
 
-1. Открыть Lori.app вручную: `open ~/Applications/Lori.app`
-2. macOS должен показать запрос на микрофон — нажать «Разрешить»
-3. Если запрос не появился: `System Settings → Privacy & Security → Microphone` → добавить Lori.app вручную
+1. Open Lori.app manually: `open ~/Applications/Lori.app`
+2. macOS should show a microphone request — click Allow
+3. If no prompt appears: `System Settings → Privacy & Security → Microphone` → add Lori.app manually
 
-Если используется Homebrew Python (не с python.org) — микрофон может не работать вообще, потому что TCC привязывается к bundle ID. Решение: установить Python с [python.org](https://python.org/downloads/) и запустить `install.sh` снова.
+If using Homebrew Python (not from python.org) — microphone may not work at all, because TCC binds to bundle ID. Fix: install Python from [python.org](https://python.org/downloads/) and run `install.sh` again.
 
-### Уведомления не появляются
+### Notifications not appearing
 
-1. `System Settings → Notifications → Python` → включить уведомления
-2. Если включены, но не пробивают режим «Не беспокоить» / Sleep:
-   `System Settings → Focus → [ваш режим] → Разрешённые уведомления → Программы → добавить Python`
+1. `System Settings → Notifications → Python` → enable notifications
+2. If enabled but not breaking through Do Not Disturb / Sleep:
+   `System Settings → Focus → [your mode] → Allowed Notifications → Apps → add Python`
 
-Проверить что DND не блокирует — в логе каждое уведомление пишет статус:
+Check if DND is blocking — the log records each notification status:
 ```
-[10:15:03] notify: 🎙 Запись | ... | ✅ Focus/DND выкл     ← уведомление должно было прийти
-[22:41:07] notify: 🎙 Запись | ... | ⛔ расписание DND (22:00–07:00)  ← заблокировано расписанием
+[10:15:03] notify: 🎙 Recording | ... | ✅ Focus/DND off     ← notification should appear
+[22:41:07] notify: 🎙 Recording | ... | ⛔ DND schedule (22:00–07:00)  ← blocked by schedule
 ```
 
-### Зависает длинный текст в терминале
+### Long text freezes in terminal
 
-Известная особенность Cursor и некоторых других терминалов (xterm.js). Текст автоматически режется на куски по 400 символов — обычно помогает. Если нет:
-- Уменьшить `CHUNK_SIZE = 400` в `lori.py` до 200
-- Или вставлять не в терминал, а в текстовый редактор
+Known behavior in Cursor and some other terminals (xterm.js). Text is automatically split into 400-character chunks — usually fixes it. If not:
+- Reduce `CHUNK_SIZE = 400` in `lori.py` to 200
+- Or paste into a text editor instead of terminal
 
 ---
 
-## Как это работает
+## How it works
 
 ```
-Shortcuts (горячая клавиша)
+Shortcuts (keyboard shortcut)
         ↓
 toggle.sh → touch /tmp/lori-toggle
         ↓
-file watcher в lori.py (проверяет каждые 0.1с)
+file watcher in lori.py (checks every 0.1s)
         ↓
-sounddevice записывает микрофон в RAM
-        ↓ (второе нажатие)
-mlx-whisper (Apple Neural Engine через MLX) расшифровывает аудио
+sounddevice records microphone to RAM
+        ↓ (second press)
+mlx-whisper (Apple Neural Engine via MLX) transcribes audio
         ↓
-CGEventPost (⌘V) вставляет текст
+CGEventPost (⌘V) pastes text
 ```
 
-**Почему Lori.app:** launchd-процессы не получают TCC-разрешение на микрофон напрямую.
-Lori.app (bundle ID `com.ri.lori`) держит разрешение через GUI-регистрацию.
-`fork()` в launcher.c оставляет Lori.app родителем — TCC видит правильный bundle.
+**Why Lori.app:** launchd processes don't get TCC microphone permission directly.
+Lori.app (bundle ID `com.ri.lori`) holds the permission via GUI registration.
+`fork()` in launcher.c keeps Lori.app as the parent — TCC sees the correct bundle.
 
 ---
 
-## Зависимости
+## Dependencies
 
-| Пакет | Зачем |
+| Package | Purpose |
 |---|---|
-| [`mlx-whisper`](https://pypi.org/project/mlx-whisper/) | расшифровка речи (Whisper medium на Apple Neural Engine через MLX) |
-| `sounddevice` | запись с микрофона |
-| `numpy` | обработка аудио |
-| `pyobjc-framework-Quartz` | вставка текста через CGEventPost |
-| `pyobjc-framework-Cocoa` | буфер обмена NSPasteboard |
-| `pyobjc-framework-UserNotifications` | уведомления |
-| `pyobjc-framework-AVFoundation` | (резерв) |
-| `soundfile` | сохранение аномальных записей |
+| [`mlx-whisper`](https://pypi.org/project/mlx-whisper/) | speech transcription (Whisper medium on Apple Neural Engine via MLX) |
+| `sounddevice` | microphone recording |
+| `numpy` | audio processing |
+| `pyobjc-framework-Quartz` | text pasting via CGEventPost |
+| `pyobjc-framework-Cocoa` | clipboard NSPasteboard |
+| `pyobjc-framework-UserNotifications` | notifications |
+| `pyobjc-framework-AVFoundation` | (reserved) |
+| `soundfile` | saving anomalous recordings |
 
 ---
 
-## Удаление
+## Uninstalling
 
 ```bash
-# Остановить и удалить агент
+# Stop and remove agent
 launchctl unload ~/Library/LaunchAgents/com.ri.lori.agent.plist
 rm ~/Library/LaunchAgents/com.ri.lori.agent.plist
 
-# Удалить файлы (включая закэшированную модель mlx-whisper в models/)
+# Remove files (including cached mlx-whisper model in models/)
 rm -rf ~/.lori
 rm -rf ~/Applications/Lori.app
 ```
 
-Разрешения удалите вручную в System Settings → Privacy & Security.
+Remove permissions manually in System Settings → Privacy & Security.
 
 ---
 
-## Лицензия
+## License
 
 [MIT](LICENSE)

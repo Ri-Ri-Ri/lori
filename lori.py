@@ -8,7 +8,7 @@ import threading
 import time
 from pathlib import Path
 
-# Самое раннее логирование — до всего остального
+# Early logging — before any other imports
 _EARLY_LOG = Path(__file__).parent / "lori.log"
 try:
     with open(_EARLY_LOG, "a") as _f:
@@ -29,9 +29,9 @@ CLIPS_DIR = Path(__file__).parent / "voice-clips"
 MLX_WHISPER_MODEL = "mlx-community/whisper-medium-mlx"
 
 DEFAULT_CONFIG = {
-    "language": "ru",
+    "language": "en",
     "sample_rate": 16000,
-    "min_volume": 0.02,
+    "min_volume": 0.03,
     "debounce_seconds": 1.0,
 }
 
@@ -71,8 +71,8 @@ def _focus_mode_status():
             start, end = int(sched["start"]), int(sched["end"])
             active = (now_min >= start or now_min < end) if start > end else (start <= now_min < end)
             if active:
-                return f"⛔ расписание DND ({start//60:02d}:{start%60:02d}–{end//60:02d}:{end%60:02d})"
-        return "✅ Focus/DND выкл"
+                return f"⛔ DND schedule ({start//60:02d}:{start%60:02d}–{end//60:02d}:{end%60:02d})"
+        return "✅ Focus/DND off"
     except Exception:
         return "?"
 
@@ -85,7 +85,7 @@ def notify(title, message=""):
         content = UN.UNMutableNotificationContent.alloc().init()
         content.setTitle_(title)
         content.setBody_(message or " ")
-        content.setInterruptionLevel_(2)  # timeSensitive — пробивает Focus если Python в разрешённых
+        content.setInterruptionLevel_(2)  # timeSensitive — breaks through Focus if Python is in allowed apps
         uid = f"vi{int(time.time()*1000)%99999}"
         req = UN.UNNotificationRequest.requestWithIdentifier_content_trigger_(uid, content, None)
         c.addNotificationRequest_withCompletionHandler_(req, None)
@@ -93,7 +93,7 @@ def notify(title, message=""):
         pass
 
 
-CHUNK_SIZE = 400  # Cursor/xterm.js зависает на больших clipboard paste
+CHUNK_SIZE = 400  # Cursor/xterm.js hangs on large clipboard pastes
 
 
 def _split_chunks(text, size):
@@ -128,7 +128,7 @@ def paste_text(text):
     # strip all ASCII control chars (0x00–0x1F incl. Ctrl+S=0x13, ESC=0x1B) and DEL (0x7F)
     text = "".join(ch for ch in text if ord(ch) >= 0x20 and ord(ch) != 0x7F)
     if not text:
-        log("Paste: пустой текст после sanitize")
+        log("Paste: empty text after sanitize")
         return
 
     chunks = _split_chunks(text, CHUNK_SIZE)
@@ -169,19 +169,21 @@ class Lori:
 
         try:
             dev = sd.query_devices(kind='input')
-            log(f"Микрофон: {dev['name']}")
+            log(f"Mic: {dev['name']}")
         except Exception as e:
-            log(f"Микрофон: {e}")
+            log(f"Mic: {e}")
 
         self._cleanup_old_clips()
 
-        log(f"Прогреваю модель {MLX_WHISPER_MODEL}...")
+        lang = None if config["language"] == "auto" else config["language"]
+        self._lang = lang
+        log(f"Warming up model {MLX_WHISPER_MODEL} (language: {config['language']})...")
         mlx_whisper.transcribe(
             np.zeros(16000, dtype=np.float32),
             path_or_hf_repo=MLX_WHISPER_MODEL,
-            language=config["language"],
+            language=lang,
         )
-        log("Готово. Жду триггера.")
+        log("Ready. Waiting for trigger.")
 
     def _cleanup_old_clips(self):
         import datetime
@@ -191,7 +193,7 @@ class Lori:
             if f.stat().st_mtime < cutoff:
                 try:
                     f.unlink()
-                    log(f"Удалён старый клип: {f.name}")
+                    log(f"Removed old clip: {f.name}")
                 except Exception:
                     pass
 
@@ -213,13 +215,13 @@ class Lori:
                 action = "start"
 
         if action == "stop":
-            log("→ стоп")
-            # notify("⏹", "Расшифровываю...")  # отключено: индикатора достаточно
+            log("→ stop")
+            # notify("⏹", "Transcribing...")  # disabled: indicator is enough
             try:
                 stream_to_stop.stop()
                 stream_to_stop.close()
             except Exception as e:
-                log(f"Ошибка остановки: {e}")
+                log(f"Stop error: {e}")
             if audio_to_transcribe:
                 threading.Thread(
                     target=self._transcribe, args=(audio_to_transcribe,), daemon=True
@@ -229,7 +231,7 @@ class Lori:
                     self.state = STATE_IDLE
 
         elif action == "start":
-            log("→ старт")
+            log("→ start")
             with self._lock:
                 self._start_recording()
 
@@ -250,55 +252,55 @@ class Lori:
                 callback=callback,
             )
             self._stream.start()
-            log("Запись началась")
-            # notify("🎙 Запись", "Говори. Нажми кнопку чтобы остановить")  # отключено: индикатора достаточно
+            log("Recording started")
+            # notify("🎙 Recording", "Speak. Press the button to stop")  # disabled: indicator is enough
         except Exception as e:
-            log(f"Ошибка записи: {e}")
+            log(f"Recording error: {e}")
             self.state = STATE_IDLE
 
     def _transcribe(self, audio_data):
-        log("Расшифровываю...")
+        log("Transcribing...")
         try:
             audio = np.concatenate(audio_data, axis=0).flatten()
             duration = len(audio) / self.config["sample_rate"]
-            log(f"Аудио: {duration:.1f}с")
+            log(f"Audio: {duration:.1f}s")
             max_vol = float(np.abs(audio).max())
-            log(f"Громкость: max={max_vol:.3f}")
+            log(f"Volume: max={max_vol:.3f}")
             if max_vol < self.config.get("min_volume", 0.02):
-                log("Слишком тихо")
-                # notify("Lori", "Слишком тихо")  # отключено: индикатора достаточно
+                log("Too quiet")
+                # notify("Lori", "Too quiet")  # disabled: indicator is enough
                 return
             # normalize audio to [-1, 1] to protect against clipping/overload
             if max_vol > 1.0:
                 import datetime
-                # Нормализуем по 99й перцентили, а не по пику — иначе один удар/клик
-                # делает всю речь неслышимой после нормализации
+                # normalize by 99th percentile, not peak — otherwise one clap/click
+                # makes all speech inaudible after normalization
                 p99 = float(np.percentile(np.abs(audio), 99))
                 scale = p99 * 3 if p99 > 0 else max_vol
                 audio = np.clip(audio, -scale, scale) / scale
                 save_path = CLIPS_DIR / f"voice-clipped-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
                 sf.write(save_path, audio, self.config["sample_rate"])
-                log(f"Аномальная громкость ({max_vol:.1f}) — нормализовал, сохранил: {save_path}")
+                log(f"Abnormal volume ({max_vol:.1f}) — normalized, saved: {save_path}")
 
             result = mlx_whisper.transcribe(
                 audio,
                 path_or_hf_repo=MLX_WHISPER_MODEL,
-                language=self.config["language"],
+                language=self._lang,
             )
             text = result["text"].strip()
-            log(f"Текст: '{text}'")
+            log(f"Text: '{text}'")
             if text:
                 paste_text(text)
-                # notify("✅", text[:70])  # отключено: индикатора достаточно
+                # notify("✅", text[:70])  # disabled: indicator is enough
             else:
-                pass  # notify("Lori", "Тишина")  # отключено: индикатора достаточно
+                pass  # notify("Lori", "Silence")  # disabled: indicator is enough
         except Exception as e:
-            log(f"Ошибка расшифровки: {e}")
-            # notify("❌ Ошибка", str(e)[:100])  # отключено: индикатора достаточно
+            log(f"Transcription error: {e}")
+            # notify("❌ Error", str(e)[:100])  # disabled: indicator is enough
         finally:
             with self._lock:
                 self.state = STATE_IDLE
-            log("Готово, жду триггера...")
+            log("Done, waiting for trigger...")
 
 
 _lock_fh = None
@@ -332,7 +334,7 @@ def main():
         app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
         log("NSApp: OK")
     except Exception as e:
-        log(f"NSApp: недоступен ({e}), продолжаем без него")
+        log(f"NSApp: unavailable ({e}), continuing without it")
         app = None
 
     config = load_config()
@@ -342,7 +344,7 @@ def main():
             vi = Lori(config)
             break
         except Exception as e:
-            log(f"Ошибка загрузки: {e}, повтор через 5с")
+            log(f"Load error: {e}, retrying in 5s")
             time.sleep(5)
 
     threading.Thread(target=watch_toggle_file, args=(vi,), daemon=True).start()
@@ -351,7 +353,7 @@ def main():
         try:
             app.run()
         except Exception as e:
-            log(f"NSApp.run() упал: {e}, держу процесс через sleep")
+            log(f"NSApp.run() failed: {e}, keeping process alive via sleep")
 
     while True:
         time.sleep(60)

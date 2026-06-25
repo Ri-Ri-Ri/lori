@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Lori — установщик
+# Lori — installer
 # macOS 13+, arm64 / x86_64, Python 3.11–3.13
 # ============================================================
 set -e
@@ -14,7 +14,7 @@ step() { echo -e "\n${YELLOW}▶${NC} $*"; }
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ── 1. Python ────────────────────────────────────────────────
-step "Ищу Python 3..."
+step "Looking for Python 3..."
 
 PYTHON_BIN=""
 PYTHON_APP=""
@@ -30,31 +30,31 @@ for ver in 3.13 3.12 3.11; do
     fi
 done
 
-# Homebrew Python не подходит: TCC привязывается к bundle ID Python.app,
-# которого у Homebrew Python нет — микрофон работать не будет.
+# Homebrew Python won't work: TCC binds to Python.app bundle ID,
+# which Homebrew Python doesn't have — microphone access will fail.
 if [ -z "$PYTHON_BIN" ]; then
     for hb_py in /opt/homebrew/bin/python3 /usr/local/bin/python3; do
         if [ -x "$hb_py" ]; then
-            err "Найден только Homebrew Python ($hb_py) — с ним не работает доступ к микрофону (нет bundle ID для TCC).
-   Установите Python с python.org/downloads/ (версия 3.11–3.13) и запустите install.sh снова."
+            err "Only Homebrew Python found ($hb_py) — microphone access won't work (no bundle ID for TCC).
+   Install Python from python.org/downloads/ (version 3.11–3.13) and run install.sh again."
         fi
     done
 fi
 
-[ -z "$PYTHON_BIN" ] && err "Python 3 не найден. Установите с python.org/downloads/ и запустите install.sh снова."
+[ -z "$PYTHON_BIN" ] && err "Python 3 not found. Install from python.org/downloads/ and run install.sh again."
 
-# ── 2. Папка установки ───────────────────────────────────────
-step "Куда установить скрипты?"
+# ── 2. Install directory ──────────────────────────────────────
+step "Where to install?"
 DEFAULT_INSTALL="$HOME/.lori"
-echo    "  По умолчанию: $DEFAULT_INSTALL"
-echo -n "  Введите путь (Enter = по умолчанию): "
+echo    "  Default: $DEFAULT_INSTALL"
+echo -n "  Enter path (Enter = default): "
 read INSTALL_DIR
 INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL}"
 mkdir -p "$INSTALL_DIR"
-ok "Папка: $INSTALL_DIR"
+ok "Directory: $INSTALL_DIR"
 
-# ── 3. Зависимости Python ─────────────────────────────────────
-step "Устанавливаю Python-зависимости..."
+# ── 3. Python dependencies ────────────────────────────────────
+step "Installing Python dependencies..."
 "$PYTHON_BIN" -m pip install --quiet --upgrade pip
 "$PYTHON_BIN" -m pip install --quiet \
     sounddevice \
@@ -65,39 +65,39 @@ step "Устанавливаю Python-зависимости..."
     pyobjc-framework-UserNotifications \
     soundfile \
     mlx-whisper
-ok "Зависимости установлены."
+ok "Dependencies installed."
 
-# ── 4. Модель mlx-whisper (распознавание речи) ─────────────────
-step "Модель mlx-whisper..."
-echo "   Модель mlx-community/whisper-medium-mlx (~1.4 GB) скачается автоматически"
-echo "   при первом запуске и закэшируется в models/ (HF_HOME) — разово."
-ok "Готово к первому запуску."
+# ── 4. mlx-whisper model ──────────────────────────────────────
+step "mlx-whisper model..."
+echo "   mlx-community/whisper-medium-mlx (~1.4 GB) will download automatically"
+echo "   on first run and be cached in models/ (HF_HOME) — only once."
+ok "Ready for first run."
 
-# ── 5. Копирую файлы ─────────────────────────────────────────
-step "Копирую файлы в $INSTALL_DIR..."
+# ── 5. Copy files ─────────────────────────────────────────────
+step "Copying files to $INSTALL_DIR..."
 cp "$SCRIPT_DIR/lori.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/toggle.sh"      "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/toggle.sh"
 
-# config.json — копирую только если не существует (не затираю пользовательские настройки)
+# config.json — copy only if it doesn't exist (don't overwrite user settings)
 if [ ! -f "$INSTALL_DIR/config.json" ]; then
     cp "$SCRIPT_DIR/config.json" "$INSTALL_DIR/"
-    ok "config.json создан (настройте при необходимости)."
+    ok "config.json created (adjust as needed)."
 else
-    ok "config.json уже есть — не трогаю."
+    ok "config.json already exists — leaving it as is."
 fi
 
-ok "Файлы скопированы."
+ok "Files copied."
 
-# ── 6. Собираю Lori.app ────────────────────────────────
-step "Собираю Lori.app..."
+# ── 6. Build Lori.app ─────────────────────────────────────────
+step "Building Lori.app..."
 
 APP_DEST="$HOME/Applications/Lori.app"
 mkdir -p "$APP_DEST/Contents/MacOS" "$APP_DEST/Contents/Resources"
 cp "$SCRIPT_DIR/Lori.app/Contents/Info.plist" "$APP_DEST/Contents/"
 cp "$SCRIPT_DIR/assets/Lori.icns" "$APP_DEST/Contents/Resources/icon.icns"
 
-# Подставляю реальные пути в launcher.c
+# Substitute actual paths into launcher.c
 LAUNCHER_TMP="/tmp/lori_launcher_$$.c"
 sed \
     -e "s|PLACEHOLDER_PYTHON_BIN|${PYTHON_BIN}|g" \
@@ -105,28 +105,28 @@ sed \
     "$SCRIPT_DIR/launcher.c" > "$LAUNCHER_TMP"
 
 clang -o "$APP_DEST/Contents/MacOS/Lori" "$LAUNCHER_TMP" \
-    || err "Не удалось скомпилировать launcher.c. Установлен ли Xcode Command Line Tools? (xcode-select --install)"
+    || err "Failed to compile launcher.c. Are Xcode Command Line Tools installed? (xcode-select --install)"
 rm -f "$LAUNCHER_TMP"
 
-# ad-hoc подпись (нужна на arm64)
+# ad-hoc signature (required on arm64)
 codesign --force --sign - "$APP_DEST/Contents/MacOS/Lori" 2>/dev/null \
-    && ok "Бинарник подписан (ad-hoc)." \
-    || warn "codesign не удался — попробуйте вручную: codesign --force --sign - $APP_DEST/Contents/MacOS/Lori"
+    && ok "Binary signed (ad-hoc)." \
+    || warn "codesign failed — try manually: codesign --force --sign - $APP_DEST/Contents/MacOS/Lori"
 
-ok "Lori.app готов: $APP_DEST"
+ok "Lori.app ready: $APP_DEST"
 
-# ── 7. Прошу разрешение macOS на микрофон ─────────────────────
-step "Открываю Lori.app для регистрации TCC-разрешений..."
-echo "   macOS покажет запрос на доступ к микрофону — нажмите «Разрешить»."
-open "$APP_DEST" || warn "Не удалось открыть Lori.app — откройте вручную."
+# ── 7. Request microphone permission ──────────────────────────
+step "Opening Lori.app to register TCC permissions..."
+echo "   macOS will ask for microphone access — click Allow."
+open "$APP_DEST" || warn "Could not open Lori.app — open it manually."
 sleep 3
 
 # ── 8. launchd plist ─────────────────────────────────────────
-step "Создаю launchd-агент..."
+step "Creating launchd agent..."
 
 PLIST_DEST="$HOME/Library/LaunchAgents/com.ri.lori.agent.plist"
 
-# Используем Python.app если доступен (для корректного TCC)
+# Use Python.app if available (for correct TCC)
 if [ -n "$PYTHON_APP" ] && [ -x "$PYTHON_APP" ]; then
     LAUNCHD_PYTHON="$PYTHON_APP"
 else
@@ -158,46 +158,46 @@ cat > "$PLIST_DEST" << PLIST_EOF
 </plist>
 PLIST_EOF
 
-ok "plist создан: $PLIST_DEST"
+ok "plist created: $PLIST_DEST"
 
-# ── 9. Загружаю агент ────────────────────────────────────────
-step "Загружаю launchd-агент..."
+# ── 9. Load agent ─────────────────────────────────────────────
+step "Loading launchd agent..."
 launchctl unload "$PLIST_DEST" 2>/dev/null || true
 launchctl load   "$PLIST_DEST"
 sleep 2
 
 if launchctl list | grep -q "com.ri.lori.agent"; then
-    ok "Агент запущен."
+    ok "Agent running."
 else
-    warn "Агент не появился в launchctl list — проверьте логи: ~/Library/Logs/lori.log"
+    warn "Agent not found in launchctl list — check logs: ~/Library/Logs/lori.log"
 fi
 
-# ── 10. Итог ─────────────────────────────────────────────────
+# ── 10. Done ──────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════════════════════════"
-echo -e "${GREEN}✅ Lori установлен!${NC}"
+echo -e "${GREEN}✅ Lori installed!${NC}"
 echo "══════════════════════════════════════════════════════"
 echo ""
-echo "Осталось сделать вручную (один раз):"
+echo "One-time manual steps required:"
 echo ""
-echo "  1. Разрешения macOS (System Settings → Privacy & Security):"
-echo "     • Accessibility  → добавить Python.app"
-echo "       Путь: $(find /Library/Frameworks/Python.framework -name "Python.app" -maxdepth 5 2>/dev/null | head -1)/Contents/MacOS/Python"
-echo "     • Microphone     → Lori.app (должно появиться после шага 7)"
-echo "     • Notifications  → разрешить уведомления для Python"
+echo "  1. macOS permissions (System Settings → Privacy & Security):"
+echo "     • Accessibility  → add Python.app"
+echo "       Path: $(find /Library/Frameworks/Python.framework -name "Python.app" -maxdepth 5 2>/dev/null | head -1)/Contents/MacOS/Python"
+echo "     • Microphone     → Lori.app (should appear after step 7)"
+echo "     • Notifications  → allow notifications for Python"
 echo ""
-echo "  2. Горячая клавиша (macOS Shortcuts):"
-echo "     • Откройте приложение «Быстрые команды» (Shortcuts.app)"
-echo "     • Создайте новую команду: «Выполнить сценарий оболочки»"
-echo "       Текст: bash $INSTALL_DIR/toggle.sh"
-echo "     • Назначьте сочетание клавиш (например, ⌥Space или Fn)"
+echo "  2. Keyboard shortcut (macOS Shortcuts app):"
+echo "     • Open Shortcuts.app"
+echo "     • Create a new shortcut: add action 'Run Shell Script'"
+echo "       Script: bash $INSTALL_DIR/toggle.sh"
+echo "     • Assign a key (e.g. ⌥Space or Fn)"
 echo ""
-echo "  3. Если уведомления не пробивают режим «Не беспокоить»:"
-echo "     System Settings → Focus → Сон → Разрешённые уведомления → Программы → Python"
+echo "  3. If notifications don't break through Do Not Disturb:"
+echo "     System Settings → Focus → Sleep → Allowed Notifications → Apps → add Python"
 echo ""
-echo "Логи: tail -f ~/Library/Logs/lori.log"
-echo "Перезапуск агента:"
+echo "Logs: tail -f ~/Library/Logs/lori.log"
+echo "Restart agent:"
 echo "  launchctl kill SIGTERM gui/\$(id -u)/com.ri.lori.agent"
 echo ""
-echo "Подробности — README.md"
+echo "See README.md for details."
 echo ""
