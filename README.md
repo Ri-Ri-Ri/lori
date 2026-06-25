@@ -20,7 +20,8 @@
 ## Установка
 
 ```bash
-cd voice-input-kit
+git clone https://github.com/Ri-Ri-Ri/voice-input.git
+cd voice-input
 bash install.sh
 ```
 
@@ -306,3 +307,9 @@ rm -rf ~/Applications/VoiceInput.app
 ```
 
 Разрешения удалите вручную в System Settings → Privacy & Security.
+
+---
+
+## Лицензия
+
+[MIT](LICENSE)

@@ -30,15 +30,13 @@ for ver in 3.13 3.12 3.11; do
     fi
 done
 
-# Homebrew fallback
+# Homebrew Python не подходит: TCC привязывается к bundle ID Python.app,
+# которого у Homebrew Python нет — микрофон работать не будет.
 if [ -z "$PYTHON_BIN" ]; then
     for hb_py in /opt/homebrew/bin/python3 /usr/local/bin/python3; do
         if [ -x "$hb_py" ]; then
-            PYTHON_BIN="$hb_py"
-            PYTHON_APP=""
-            warn "Используется Homebrew Python: $PYTHON_BIN"
-            warn "Микрофон может не работать без Apple Python.framework (см. README раздел «Проблемы»)."
-            break
+            err "Найден только Homebrew Python ($hb_py) — с ним не работает доступ к микрофону (нет bundle ID для TCC).
+   Установите Python с python.org/downloads/ (версия 3.11–3.13) и запустите install.sh снова."
         fi
     done
 fi
