@@ -93,8 +93,9 @@ ok "Файлы скопированы."
 step "Собираю Lori.app..."
 
 APP_DEST="$HOME/Applications/Lori.app"
-mkdir -p "$APP_DEST/Contents/MacOS"
+mkdir -p "$APP_DEST/Contents/MacOS" "$APP_DEST/Contents/Resources"
 cp "$SCRIPT_DIR/Lori.app/Contents/Info.plist" "$APP_DEST/Contents/"
+cp "$SCRIPT_DIR/assets/Lori.icns" "$APP_DEST/Contents/Resources/icon.icns"
 
 # Подставляю реальные пути в launcher.c
 LAUNCHER_TMP="/tmp/voice_launcher_$$.c"
