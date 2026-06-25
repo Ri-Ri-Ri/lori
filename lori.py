@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 # Самое раннее логирование — до всего остального
-_EARLY_LOG = Path(__file__).parent / "voice-input.log"
+_EARLY_LOG = Path(__file__).parent / "lori.log"
 try:
     with open(_EARLY_LOG, "a") as _f:
         _f.write(f"[{time.strftime('%H:%M:%S')}] === START (pid={os.getpid()}) ===\n")
@@ -24,7 +24,7 @@ import sounddevice as sd
 import mlx_whisper
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
-LOG_PATH = Path(__file__).parent / "voice-input.log"
+LOG_PATH = Path(__file__).parent / "lori.log"
 CLIPS_DIR = Path(__file__).parent / "voice-clips"
 MLX_WHISPER_MODEL = "mlx-community/whisper-medium-mlx"
 
@@ -39,7 +39,7 @@ STATE_IDLE = "idle"
 STATE_RECORDING = "recording"
 STATE_TRANSCRIBING = "transcribing"
 
-TOGGLE_FILE = "/tmp/voice-input-toggle"
+TOGGLE_FILE = "/tmp/lori-toggle"
 
 
 def log(msg):
@@ -158,7 +158,7 @@ def paste_text(text):
             log(f"Paste fallback error: {ex2}")
 
 
-class VoiceInput:
+class Lori:
     def __init__(self, config):
         self.config = config
         self.state = STATE_IDLE
@@ -266,7 +266,7 @@ class VoiceInput:
             log(f"Громкость: max={max_vol:.3f}")
             if max_vol < self.config.get("min_volume", 0.02):
                 log("Слишком тихо")
-                # notify("Voice Input", "Слишком тихо")  # отключено: индикатора достаточно
+                # notify("Lori", "Слишком тихо")  # отключено: индикатора достаточно
                 return
             # normalize audio to [-1, 1] to protect against clipping/overload
             if max_vol > 1.0:
@@ -291,7 +291,7 @@ class VoiceInput:
                 paste_text(text)
                 # notify("✅", text[:70])  # отключено: индикатора достаточно
             else:
-                pass  # notify("Voice Input", "Тишина")  # отключено: индикатора достаточно
+                pass  # notify("Lori", "Тишина")  # отключено: индикатора достаточно
         except Exception as e:
             log(f"Ошибка расшифровки: {e}")
             # notify("❌ Ошибка", str(e)[:100])  # отключено: индикатора достаточно
@@ -306,7 +306,7 @@ _lock_fh = None
 
 def acquire_lock():
     global _lock_fh
-    _lock_fh = open("/tmp/voice-input.lock", "w")
+    _lock_fh = open("/tmp/lori.lock", "w")
     try:
         fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except IOError:
@@ -339,7 +339,7 @@ def main():
 
     while True:
         try:
-            vi = VoiceInput(config)
+            vi = Lori(config)
             break
         except Exception as e:
             log(f"Ошибка загрузки: {e}, повтор через 5с")

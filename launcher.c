@@ -1,9 +1,9 @@
 /*
- * launcher.c — VoiceInput.app binary
+ * launcher.c — Lori.app binary
  *
  * Зачем fork: launchd-процессы не получают TCC-разрешение на микрофон напрямую.
- * VoiceInput.app (bundle ID: com.ri.voice-input) получил разрешение через GUI.
- * fork() оставляет VoiceInput.app родителем — TCC видит правильный bundle ID.
+ * Lori.app (bundle ID: com.ri.lori) получил разрешение через GUI.
+ * fork() оставляет Lori.app родителем — TCC видит правильный bundle ID.
  *
  * Строки PYTHON_BIN и SCRIPT_PATH подставляет install.sh.
  */

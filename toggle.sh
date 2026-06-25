@@ -1,2 +1,2 @@
 #!/bin/bash
-touch /tmp/voice-input-toggle
+touch /tmp/lori-toggle

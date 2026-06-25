@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Voice Input — установщик
+# Lori — установщик
 # macOS 13+, arm64 / x86_64, Python 3.11–3.13
 # ============================================================
 set -e
@@ -45,7 +45,7 @@ fi
 
 # ── 2. Папка установки ───────────────────────────────────────
 step "Куда установить скрипты?"
-DEFAULT_INSTALL="$HOME/.voice-input"
+DEFAULT_INSTALL="$HOME/.lori"
 echo    "  По умолчанию: $DEFAULT_INSTALL"
 echo -n "  Введите путь (Enter = по умолчанию): "
 read INSTALL_DIR
@@ -75,7 +75,7 @@ ok "Готово к первому запуску."
 
 # ── 5. Копирую файлы ─────────────────────────────────────────
 step "Копирую файлы в $INSTALL_DIR..."
-cp "$SCRIPT_DIR/voice_input.py" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/lori.py" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/toggle.sh"      "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/toggle.sh"
 
@@ -89,41 +89,41 @@ fi
 
 ok "Файлы скопированы."
 
-# ── 6. Собираю VoiceInput.app ────────────────────────────────
-step "Собираю VoiceInput.app..."
+# ── 6. Собираю Lori.app ────────────────────────────────
+step "Собираю Lori.app..."
 
-APP_DEST="$HOME/Applications/VoiceInput.app"
+APP_DEST="$HOME/Applications/Lori.app"
 mkdir -p "$APP_DEST/Contents/MacOS"
-cp "$SCRIPT_DIR/VoiceInput.app/Contents/Info.plist" "$APP_DEST/Contents/"
+cp "$SCRIPT_DIR/Lori.app/Contents/Info.plist" "$APP_DEST/Contents/"
 
 # Подставляю реальные пути в launcher.c
 LAUNCHER_TMP="/tmp/voice_launcher_$$.c"
 sed \
     -e "s|PLACEHOLDER_PYTHON_BIN|${PYTHON_BIN}|g" \
-    -e "s|PLACEHOLDER_SCRIPT_PATH|${INSTALL_DIR}/voice_input.py|g" \
+    -e "s|PLACEHOLDER_SCRIPT_PATH|${INSTALL_DIR}/lori.py|g" \
     "$SCRIPT_DIR/launcher.c" > "$LAUNCHER_TMP"
 
-clang -o "$APP_DEST/Contents/MacOS/VoiceInput" "$LAUNCHER_TMP" \
+clang -o "$APP_DEST/Contents/MacOS/Lori" "$LAUNCHER_TMP" \
     || err "Не удалось скомпилировать launcher.c. Установлен ли Xcode Command Line Tools? (xcode-select --install)"
 rm -f "$LAUNCHER_TMP"
 
 # ad-hoc подпись (нужна на arm64)
-codesign --force --sign - "$APP_DEST/Contents/MacOS/VoiceInput" 2>/dev/null \
+codesign --force --sign - "$APP_DEST/Contents/MacOS/Lori" 2>/dev/null \
     && ok "Бинарник подписан (ad-hoc)." \
-    || warn "codesign не удался — попробуйте вручную: codesign --force --sign - $APP_DEST/Contents/MacOS/VoiceInput"
+    || warn "codesign не удался — попробуйте вручную: codesign --force --sign - $APP_DEST/Contents/MacOS/Lori"
 
-ok "VoiceInput.app готов: $APP_DEST"
+ok "Lori.app готов: $APP_DEST"
 
 # ── 7. Прошу разрешение macOS на микрофон ─────────────────────
-step "Открываю VoiceInput.app для регистрации TCC-разрешений..."
+step "Открываю Lori.app для регистрации TCC-разрешений..."
 echo "   macOS покажет запрос на доступ к микрофону — нажмите «Разрешить»."
-open "$APP_DEST" || warn "Не удалось открыть VoiceInput.app — откройте вручную."
+open "$APP_DEST" || warn "Не удалось открыть Lori.app — откройте вручную."
 sleep 3
 
 # ── 8. launchd plist ─────────────────────────────────────────
 step "Создаю launchd-агент..."
 
-PLIST_DEST="$HOME/Library/LaunchAgents/com.ri.voice.agent.plist"
+PLIST_DEST="$HOME/Library/LaunchAgents/com.ri.lori.agent.plist"
 
 # Используем Python.app если доступен (для корректного TCC)
 if [ -n "$PYTHON_APP" ] && [ -x "$PYTHON_APP" ]; then
@@ -138,11 +138,11 @@ cat > "$PLIST_DEST" << PLIST_EOF
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.ri.voice.agent</string>
+    <string>com.ri.lori.agent</string>
     <key>ProgramArguments</key>
     <array>
         <string>${LAUNCHD_PYTHON}</string>
-        <string>${INSTALL_DIR}/voice_input.py</string>
+        <string>${INSTALL_DIR}/lori.py</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -165,16 +165,16 @@ launchctl unload "$PLIST_DEST" 2>/dev/null || true
 launchctl load   "$PLIST_DEST"
 sleep 2
 
-if launchctl list | grep -q "com.ri.voice.agent"; then
+if launchctl list | grep -q "com.ri.lori.agent"; then
     ok "Агент запущен."
 else
-    warn "Агент не появился в launchctl list — проверьте логи: ~/Library/Logs/voice-input.log"
+    warn "Агент не появился в launchctl list — проверьте логи: ~/Library/Logs/lori.log"
 fi
 
 # ── 10. Итог ─────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════════════════════════"
-echo -e "${GREEN}✅ Voice Input установлен!${NC}"
+echo -e "${GREEN}✅ Lori установлен!${NC}"
 echo "══════════════════════════════════════════════════════"
 echo ""
 echo "Осталось сделать вручную (один раз):"
@@ -182,7 +182,7 @@ echo ""
 echo "  1. Разрешения macOS (System Settings → Privacy & Security):"
 echo "     • Accessibility  → добавить Python.app"
 echo "       Путь: $(find /Library/Frameworks/Python.framework -name "Python.app" -maxdepth 5 2>/dev/null | head -1)/Contents/MacOS/Python"
-echo "     • Microphone     → VoiceInput.app (должно появиться после шага 7)"
+echo "     • Microphone     → Lori.app (должно появиться после шага 7)"
 echo "     • Notifications  → разрешить уведомления для Python"
 echo ""
 echo "  2. Горячая клавиша (macOS Shortcuts):"
@@ -194,9 +194,9 @@ echo ""
 echo "  3. Если уведомления не пробивают режим «Не беспокоить»:"
 echo "     System Settings → Focus → Сон → Разрешённые уведомления → Программы → Python"
 echo ""
-echo "Логи: tail -f ~/Library/Logs/voice-input.log"
+echo "Логи: tail -f ~/Library/Logs/lori.log"
 echo "Перезапуск агента:"
-echo "  launchctl kill SIGTERM gui/\$(id -u)/com.ri.voice.agent"
+echo "  launchctl kill SIGTERM gui/\$(id -u)/com.ri.lori.agent"
 echo ""
 echo "Подробности — README.md"
 echo ""

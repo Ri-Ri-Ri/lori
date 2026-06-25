@@ -1,4 +1,4 @@
-# Voice Input — голосовой ввод для macOS
+# Lori — голосовой ввод для macOS
 
 Нажимаешь кнопку — говоришь — нажимаешь снова. Текст сам вставляется туда, где стоит курсор.
 
@@ -20,8 +20,8 @@
 ## Установка
 
 ```bash
-git clone https://github.com/Ri-Ri-Ri/voice-input.git
-cd voice-input
+git clone https://github.com/Ri-Ri-Ri/lori.git
+cd lori
 bash install.sh
 ```
 
@@ -55,11 +55,11 @@ bash install.sh
 
 `System Settings → Privacy & Security → Microphone`
 
-Добавить `VoiceInput.app` (лежит в `~/Applications/`).
+Добавить `Lori.app` (лежит в `~/Applications/`).
 
 Если его нет в списке — откройте вручную:
 ```bash
-open ~/Applications/VoiceInput.app
+open ~/Applications/Lori.app
 ```
 macOS попросит разрешение на микрофон.
 
@@ -80,7 +80,7 @@ macOS попросит разрешение на микрофон.
 2. Добавьте действие **«Выполнить сценарий оболочки»**
 3. Текст:
    ```
-   bash ~/.voice-input/toggle.sh
+   bash ~/.lori/toggle.sh
    ```
    (замените путь если устанавливали в другое место)
 4. Назначьте клавишу: ⌥Space, Fn, или любую удобную
@@ -96,27 +96,27 @@ macOS попросит разрешение на микрофон.
 После установки:
 
 ```
-~/.voice-input/
-├── voice_input.py       — основной скрипт
+~/.lori/
+├── lori.py       — основной скрипт
 ├── config.json          — настройки
 ├── toggle.sh            — триггер (вызывается из Shortcuts)
 └── models/              — кэш модели mlx-whisper (HF_HOME), ~1.4 ГБ, скачивается один раз
 
 ~/Applications/
-└── VoiceInput.app       — нужен только для разрешения на микрофон
+└── Lori.app       — нужен только для разрешения на микрофон
 
 ~/Library/LaunchAgents/
 └── com.ri.voice.agent.plist  — автозапуск
 
 ~/Library/Logs/
-└── voice-input.log      — все события
+└── lori.log      — все события
 ```
 
 ---
 
 ## Конфиг
 
-`~/.voice-input/config.json`:
+`~/.lori/config.json`:
 
 ```json
 {
@@ -153,7 +153,7 @@ launchctl unload ~/Library/LaunchAgents/com.ri.voice.agent.plist
 launchctl load ~/Library/LaunchAgents/com.ri.voice.agent.plist
 
 # Логи в реальном времени
-tail -f ~/Library/Logs/voice-input.log
+tail -f ~/Library/Logs/lori.log
 ```
 
 ---
@@ -162,7 +162,7 @@ tail -f ~/Library/Logs/voice-input.log
 
 Перед тем как разбираться вручную — посмотрите лог:
 ```bash
-tail -40 ~/Library/Logs/voice-input.log
+tail -40 ~/Library/Logs/lori.log
 ```
 
 ### Дерево проблем
@@ -197,8 +197,8 @@ tail -40 ~/Library/Logs/voice-input.log
 
 ```bash
 # Смотреть оба лога
-cat /tmp/voice-input-launchd.log
-tail -20 ~/Library/Logs/voice-input.log
+cat /tmp/lori-launchd.log
+tail -20 ~/Library/Logs/lori.log
 ```
 
 | Ошибка в логе | Причина | Решение |
@@ -208,7 +208,7 @@ tail -20 ~/Library/Logs/voice-input.log
 | `No module named 'numpy'` или numpy crash | Сломан numpy (часто на Python 3.13) | `pip3 install numpy --force-reinstall` |
 | `clang: error` при install.sh | Нет Xcode CLI Tools | `xcode-select --install` |
 | `exit code 78` в launchctl | StandardOutPath в недоступной папке | Убрать StandardOutPath из plist или изменить на `/tmp/` |
-| Два экземпляра → throttle | Предыдущий процесс завис | `pkill -f voice_input.py` затем перезапустить агент |
+| Два экземпляра → throttle | Предыдущий процесс завис | `pkill -f lori.py` затем перезапустить агент |
 
 ### Текст не вставляется
 
@@ -231,9 +231,9 @@ tail -20 ~/Library/Logs/voice-input.log
 
 В логе появится: `[Errno -9999] Unanticipated host error` или запись стартует, но аудио пустое.
 
-1. Открыть VoiceInput.app вручную: `open ~/Applications/VoiceInput.app`
+1. Открыть Lori.app вручную: `open ~/Applications/Lori.app`
 2. macOS должен показать запрос на микрофон — нажать «Разрешить»
-3. Если запрос не появился: `System Settings → Privacy & Security → Microphone` → добавить VoiceInput.app вручную
+3. Если запрос не появился: `System Settings → Privacy & Security → Microphone` → добавить Lori.app вручную
 
 Если используется Homebrew Python (не с python.org) — микрофон может не работать вообще, потому что TCC привязывается к bundle ID. Решение: установить Python с [python.org](https://python.org/downloads/) и запустить `install.sh` снова.
 
@@ -252,7 +252,7 @@ tail -20 ~/Library/Logs/voice-input.log
 ### Зависает длинный текст в терминале
 
 Известная особенность Cursor и некоторых других терминалов (xterm.js). Текст автоматически режется на куски по 400 символов — обычно помогает. Если нет:
-- Уменьшить `CHUNK_SIZE = 400` в `voice_input.py` до 200
+- Уменьшить `CHUNK_SIZE = 400` в `lori.py` до 200
 - Или вставлять не в терминал, а в текстовый редактор
 
 ---
@@ -262,9 +262,9 @@ tail -20 ~/Library/Logs/voice-input.log
 ```
 Shortcuts (горячая клавиша)
         ↓
-toggle.sh → touch /tmp/voice-input-toggle
+toggle.sh → touch /tmp/lori-toggle
         ↓
-file watcher в voice_input.py (проверяет каждые 0.1с)
+file watcher в lori.py (проверяет каждые 0.1с)
         ↓
 sounddevice записывает микрофон в RAM
         ↓ (второе нажатие)
@@ -273,9 +273,9 @@ mlx-whisper (Apple Neural Engine через MLX) расшифровывает а
 CGEventPost (⌘V) вставляет текст
 ```
 
-**Почему VoiceInput.app:** launchd-процессы не получают TCC-разрешение на микрофон напрямую.
-VoiceInput.app (bundle ID `com.ri.voice-input`) держит разрешение через GUI-регистрацию.
-`fork()` в launcher.c оставляет VoiceInput.app родителем — TCC видит правильный bundle.
+**Почему Lori.app:** launchd-процессы не получают TCC-разрешение на микрофон напрямую.
+Lori.app (bundle ID `com.ri.lori`) держит разрешение через GUI-регистрацию.
+`fork()` в launcher.c оставляет Lori.app родителем — TCC видит правильный bundle.
 
 ---
 
@@ -302,8 +302,8 @@ launchctl unload ~/Library/LaunchAgents/com.ri.voice.agent.plist
 rm ~/Library/LaunchAgents/com.ri.voice.agent.plist
 
 # Удалить файлы (включая закэшированную модель mlx-whisper в models/)
-rm -rf ~/.voice-input
-rm -rf ~/Applications/VoiceInput.app
+rm -rf ~/.lori
+rm -rf ~/Applications/Lori.app
 ```
 
 Разрешения удалите вручную в System Settings → Privacy & Security.
