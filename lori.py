@@ -135,6 +135,33 @@ def _cmd_v():
         time.sleep(0.05)
 
 
+def _snapshot_pasteboard(pb):
+    # capture every item with all its data types (text, images, files...)
+    saved = []
+    for item in pb.pasteboardItems() or []:
+        entry = {}
+        for t in item.types():
+            data = item.dataForType_(t)
+            if data is not None:
+                entry[str(t)] = data
+        if entry:
+            saved.append(entry)
+    return saved
+
+
+def _restore_pasteboard(pb, saved):
+    from AppKit import NSPasteboardItem
+    items = []
+    for entry in saved:
+        item = NSPasteboardItem.alloc().init()
+        for t, data in entry.items():
+            item.setData_forType_(data, t)
+        items.append(item)
+    if items:
+        pb.clearContents()
+        pb.writeObjects_(items)
+
+
 def paste_text(text):
     # join lines (each \n in terminal = Enter → shell executes line)
     text = " ".join(text.splitlines()).strip()
@@ -151,7 +178,7 @@ def paste_text(text):
     try:
         from AppKit import NSPasteboard
         pb = NSPasteboard.generalPasteboard()
-        saved = pb.stringForType_("public.utf8-plain-text")
+        saved = _snapshot_pasteboard(pb)
 
         for i, chunk in enumerate(chunks):
             pb.clearContents()
@@ -161,11 +188,10 @@ def paste_text(text):
             if i < len(chunks) - 1:
                 time.sleep(0.15)
 
-        if saved is not None:
+        if saved:
             # let the last Cmd+V read the pasteboard before restoring
             time.sleep(0.5)
-            pb.clearContents()
-            pb.setString_forType_(saved, "public.utf8-plain-text")
+            _restore_pasteboard(pb, saved)
 
         log("Paste: OK")
     except Exception as ex:
@@ -294,7 +320,9 @@ class Lori:
         with self._lock:
             if self.state != STATE_RECORDING:
                 return
-        log(f"Auto-stop: recording hit {self.config.get('max_recording_seconds', 600)}s limit")
+        limit = self.config.get("max_recording_seconds", 600)
+        log(f"Auto-stop: recording hit {limit}s limit")
+        notify("⏱ Lori: auto-stop", f"Recording hit the {limit // 60} min limit — transcribing")
         self._last_tap = 0.0  # bypass debounce
         self.toggle()
 
