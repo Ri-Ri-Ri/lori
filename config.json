@@ -2,5 +2,6 @@
   "language": "en",
   "sample_rate": 16000,
   "debounce_seconds": 0.3,
-  "min_volume": 0.03
+  "min_volume": 0.03,
+  "max_recording_seconds": 600
 }

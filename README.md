@@ -12,8 +12,9 @@ Press a button — speak — press again. Text is pasted wherever your cursor is
 
 - Records audio from your microphone
 - Transcribes using [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) (model `mlx-community/whisper-medium-mlx`) — Whisper medium accelerated on Apple Neural Engine via MLX
-- Pastes text via clipboard (⌘V) into any application
+- Pastes text via clipboard (⌘V) into any application — your previous clipboard content is restored after pasting
 - Runs in the background, starts automatically at login
+- Privacy-minded: transcripts are never written to the log (only their length), trigger/lock files live in a private per-user directory (`~/Library/Application Support/lori/`, mode 0700), recording auto-stops after 10 minutes if you forget it
 
 **Requirements:** macOS 13+ (Apple Silicon runs on Neural Engine; Intel will be noticeably slower), Python 3.11–3.13 (recommended: install from [python.org](https://python.org/downloads/)), ~1.5 GB free disk space (mlx-whisper medium model, cached once).
 
@@ -30,7 +31,6 @@ bash install.sh
 The script will:
 - find Python
 - install dependencies (Python packages including `mlx-whisper`)
-- compile the helper .app
 - create a launchd agent (auto-start)
 
 The mlx-whisper medium model (~1.4 GB) downloads automatically on first run and is cached locally — only once.
@@ -57,13 +57,9 @@ Add `Python.app`. Path is usually:
 
 `System Settings → Privacy & Security → Microphone`
 
-Add `Lori.app` (located in `~/Applications/`).
+Add the same `Python.app`.
 
-If it's not in the list — open it manually:
-```bash
-open ~/Applications/Lori.app
-```
-macOS will ask for microphone permission.
+If it is not in the list, start Lori once and macOS should ask for microphone permission.
 
 ### 3. Notifications — to see status notifications
 
@@ -102,16 +98,15 @@ After installation:
 ├── lori.py              — main script
 ├── config.json          — settings
 ├── toggle.sh            — trigger (called from Shortcuts)
-└── models/              — mlx-whisper model cache (HF_HOME), ~1.4 GB, downloaded once
-
-~/Applications/
-└── Lori.app             — needed only for microphone permission
+├── models/              — mlx-whisper model cache (HF_HOME), ~1.4 GB, downloaded once
+└── lori.log             — events log (rotates to lori.log.1 at 1 MB; transcripts are not logged)
 
 ~/Library/LaunchAgents/
 └── com.ri.lori.agent.plist  — auto-start
 
-~/Library/Logs/
-└── lori.log             — all events
+~/Library/Application Support/lori/
+├── toggle               — trigger file (created by toggle.sh, consumed by lori.py)
+└── lori.lock            — single-instance lock
 ```
 
 ---
@@ -125,7 +120,8 @@ After installation:
   "language": "en",
   "sample_rate": 16000,
   "debounce_seconds": 0.3,
-  "min_volume": 0.03
+  "min_volume": 0.03,
+  "max_recording_seconds": 600
 }
 ```
 
@@ -134,6 +130,7 @@ After installation:
 | `language` | `"en"` | Transcription language. Set to `"auto"` to let Whisper detect the language automatically. Supports [99 languages](https://github.com/openai/whisper#available-models-and-languages): `"ru"`, `"uk"`, `"de"`, `"fr"`, `"es"`, and more. |
 | `min_volume` | `0.03` | Silence threshold. If quiet speech isn't transcribed — lower this value. |
 | `debounce_seconds` | `0.3` | Protection against double-tap. |
+| `max_recording_seconds` | `600` | Auto-stop for a forgotten recording (audio is buffered in RAM while recording). |
 
 > **Auto-detect:** set `"language": "auto"` and Whisper will detect the language on every recording. Useful if you switch between languages often, but adds ~0.5s to transcription time.
 
@@ -157,7 +154,7 @@ launchctl unload ~/Library/LaunchAgents/com.ri.lori.agent.plist
 launchctl load ~/Library/LaunchAgents/com.ri.lori.agent.plist
 
 # Live logs
-tail -f ~/Library/Logs/lori.log
+tail -f ~/.lori/lori.log
 ```
 
 ---
@@ -166,7 +163,7 @@ tail -f ~/Library/Logs/lori.log
 
 Before digging in manually — check the log:
 ```bash
-tail -40 ~/Library/Logs/lori.log
+tail -40 ~/.lori/lori.log
 ```
 
 ### Decision tree
@@ -200,9 +197,8 @@ Recording started (🎙 notification) — pressed again — text not pasted
 ### Agent crashes on start
 
 ```bash
-# Check both logs
-cat /tmp/lori-launchd.log
-tail -20 ~/Library/Logs/lori.log
+# Check the log
+tail -20 ~/.lori/lori.log
 ```
 
 | Error in log | Cause | Fix |
@@ -235,9 +231,15 @@ If the path isn't found via the dialog — drag the file directly from Finder.
 
 The log will show: `[Errno -9999] Unanticipated host error` or recording starts but audio is empty.
 
-1. Open Lori.app manually: `open ~/Applications/Lori.app`
-2. macOS should show a microphone request — click Allow
-3. If no prompt appears: `System Settings → Privacy & Security → Microphone` → add Lori.app manually
+1. Open `System Settings → Privacy & Security → Microphone`
+2. Add Python.app at:
+   ```
+   /Library/Frameworks/Python.framework/Versions/3.XX/Resources/Python.app
+   ```
+3. Restart the agent:
+   ```bash
+   launchctl kill SIGTERM gui/$(id -u)/com.ri.lori.agent
+   ```
 
 If using Homebrew Python (not from python.org) — microphone may not work at all, because TCC binds to bundle ID. Fix: install Python from [python.org](https://python.org/downloads/) and run `install.sh` again.
 
@@ -266,7 +268,7 @@ Known behavior in Cursor and some other terminals (xterm.js). Text is automatica
 ```
 Shortcuts (keyboard shortcut)
         ↓
-toggle.sh → touch /tmp/lori-toggle
+toggle.sh → touch "~/Library/Application Support/lori/toggle"
         ↓
 file watcher in lori.py (checks every 0.1s)
         ↓
@@ -277,9 +279,7 @@ mlx-whisper (Apple Neural Engine via MLX) transcribes audio
 CGEventPost (⌘V) pastes text
 ```
 
-**Why Lori.app:** launchd processes don't get TCC microphone permission directly.
-Lori.app (bundle ID `com.ri.lori`) holds the permission via GUI registration.
-`fork()` in launcher.c keeps Lori.app as the parent — TCC sees the correct bundle.
+The launchd agent runs Python through `Python.app`, so macOS TCC permissions are attached to the Python app bundle.
 
 ---
 
@@ -307,7 +307,6 @@ rm ~/Library/LaunchAgents/com.ri.lori.agent.plist
 
 # Remove files (including cached mlx-whisper model in models/)
 rm -rf ~/.lori
-rm -rf ~/Applications/Lori.app
 ```
 
 Remove permissions manually in System Settings → Privacy & Security.

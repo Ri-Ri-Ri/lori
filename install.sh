@@ -89,39 +89,7 @@ fi
 
 ok "Files copied."
 
-# ── 6. Build Lori.app ─────────────────────────────────────────
-step "Building Lori.app..."
-
-APP_DEST="$HOME/Applications/Lori.app"
-mkdir -p "$APP_DEST/Contents/MacOS" "$APP_DEST/Contents/Resources"
-cp "$SCRIPT_DIR/Lori.app/Contents/Info.plist" "$APP_DEST/Contents/"
-cp "$SCRIPT_DIR/assets/Lori.icns" "$APP_DEST/Contents/Resources/icon.icns"
-
-# Substitute actual paths into launcher.c
-LAUNCHER_TMP="/tmp/lori_launcher_$$.c"
-sed \
-    -e "s|PLACEHOLDER_PYTHON_BIN|${PYTHON_BIN}|g" \
-    -e "s|PLACEHOLDER_SCRIPT_PATH|${INSTALL_DIR}/lori.py|g" \
-    "$SCRIPT_DIR/launcher.c" > "$LAUNCHER_TMP"
-
-clang -o "$APP_DEST/Contents/MacOS/Lori" "$LAUNCHER_TMP" \
-    || err "Failed to compile launcher.c. Are Xcode Command Line Tools installed? (xcode-select --install)"
-rm -f "$LAUNCHER_TMP"
-
-# ad-hoc signature (required on arm64)
-codesign --force --sign - "$APP_DEST/Contents/MacOS/Lori" 2>/dev/null \
-    && ok "Binary signed (ad-hoc)." \
-    || warn "codesign failed — try manually: codesign --force --sign - $APP_DEST/Contents/MacOS/Lori"
-
-ok "Lori.app ready: $APP_DEST"
-
-# ── 7. Request microphone permission ──────────────────────────
-step "Opening Lori.app to register TCC permissions..."
-echo "   macOS will ask for microphone access — click Allow."
-open "$APP_DEST" || warn "Could not open Lori.app — open it manually."
-sleep 3
-
-# ── 8. launchd plist ─────────────────────────────────────────
+# ── 6. launchd plist ─────────────────────────────────────────
 step "Creating launchd agent..."
 
 PLIST_DEST="$HOME/Library/LaunchAgents/com.ri.lori.agent.plist"
@@ -160,7 +128,7 @@ PLIST_EOF
 
 ok "plist created: $PLIST_DEST"
 
-# ── 9. Load agent ─────────────────────────────────────────────
+# ── 7. Load agent ─────────────────────────────────────────────
 step "Loading launchd agent..."
 launchctl unload "$PLIST_DEST" 2>/dev/null || true
 launchctl load   "$PLIST_DEST"
@@ -169,7 +137,7 @@ sleep 2
 if launchctl list | grep -q "com.ri.lori.agent"; then
     ok "Agent running."
 else
-    warn "Agent not found in launchctl list — check logs: ~/Library/Logs/lori.log"
+    warn "Agent not found in launchctl list — check logs: $INSTALL_DIR/lori.log"
 fi
 
 # ── 10. Done ──────────────────────────────────────────────────
@@ -183,7 +151,7 @@ echo ""
 echo "  1. macOS permissions (System Settings → Privacy & Security):"
 echo "     • Accessibility  → add Python.app"
 echo "       Path: $(find /Library/Frameworks/Python.framework -name "Python.app" -maxdepth 5 2>/dev/null | head -1)/Contents/MacOS/Python"
-echo "     • Microphone     → Lori.app (should appear after step 7)"
+echo "     • Microphone     → add Python.app"
 echo "     • Notifications  → allow notifications for Python"
 echo ""
 echo "  2. Keyboard shortcut (macOS Shortcuts app):"
@@ -195,7 +163,7 @@ echo ""
 echo "  3. If notifications don't break through Do Not Disturb:"
 echo "     System Settings → Focus → Sleep → Allowed Notifications → Apps → add Python"
 echo ""
-echo "Logs: tail -f ~/Library/Logs/lori.log"
+echo "Logs: tail -f $INSTALL_DIR/lori.log"
 echo "Restart agent:"
 echo "  launchctl kill SIGTERM gui/\$(id -u)/com.ri.lori.agent"
 echo ""

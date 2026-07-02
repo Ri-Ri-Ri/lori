@@ -1,2 +1,3 @@
 #!/bin/bash
-touch /tmp/lori-toggle
+mkdir -p "$HOME/Library/Application Support/lori"
+touch "$HOME/Library/Application Support/lori/toggle"

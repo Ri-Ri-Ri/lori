@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime
 import fcntl
 import json
 import os
@@ -8,10 +9,11 @@ import threading
 import time
 from pathlib import Path
 
+LOG_PATH = Path(__file__).parent / "lori.log"
+
 # Early logging — before any other imports
-_EARLY_LOG = Path(__file__).parent / "lori.log"
 try:
-    with open(_EARLY_LOG, "a") as _f:
+    with open(LOG_PATH, "a") as _f:
         _f.write(f"[{time.strftime('%H:%M:%S')}] === START (pid={os.getpid()}) ===\n")
 except Exception:
     pass
@@ -24,28 +26,35 @@ import sounddevice as sd
 import mlx_whisper
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
-LOG_PATH = Path(__file__).parent / "lori.log"
 CLIPS_DIR = Path(__file__).parent / "voice-clips"
 MLX_WHISPER_MODEL = "mlx-community/whisper-medium-mlx"
+MAX_LOG_SIZE = 1_000_000  # rotate to lori.log.1 beyond this
+
+# /tmp is world-writable: any local process could trigger the mic or
+# symlink-attack the lock file — keep runtime files in a private per-user dir
+RUNTIME_DIR = Path.home() / "Library" / "Application Support" / "lori"
+TOGGLE_FILE = RUNTIME_DIR / "toggle"
+LOCK_FILE = RUNTIME_DIR / "lori.lock"
 
 DEFAULT_CONFIG = {
     "language": "en",
     "sample_rate": 16000,
     "min_volume": 0.03,
     "debounce_seconds": 1.0,
+    "max_recording_seconds": 600,
 }
 
 STATE_IDLE = "idle"
 STATE_RECORDING = "recording"
 STATE_TRANSCRIBING = "transcribing"
 
-TOGGLE_FILE = "/tmp/lori-toggle"
-
 
 def log(msg):
     line = f"[{time.strftime('%H:%M:%S')}] {msg}"
     print(line, flush=True)
     try:
+        if LOG_PATH.exists() and LOG_PATH.stat().st_size > MAX_LOG_SIZE:
+            LOG_PATH.replace(LOG_PATH.with_name(LOG_PATH.name + ".1"))
         with open(LOG_PATH, "a") as f:
             f.write(line + "\n")
     except Exception:
@@ -53,10 +62,14 @@ def log(msg):
 
 
 def load_config():
-    if CONFIG_PATH.exists():
+    try:
         with open(CONFIG_PATH) as f:
             return {**DEFAULT_CONFIG, **json.load(f)}
-    return DEFAULT_CONFIG
+    except FileNotFoundError:
+        return dict(DEFAULT_CONFIG)
+    except Exception as e:
+        log(f"Config error: {e} — using defaults")
+        return dict(DEFAULT_CONFIG)
 
 
 def _focus_mode_status():
@@ -86,7 +99,7 @@ def notify(title, message=""):
         content.setTitle_(title)
         content.setBody_(message or " ")
         content.setInterruptionLevel_(2)  # timeSensitive — breaks through Focus if Python is in allowed apps
-        uid = f"vi{int(time.time()*1000)%99999}"
+        uid = f"lori{int(time.time()*1000)%99999}"
         req = UN.UNNotificationRequest.requestWithIdentifier_content_trigger_(uid, content, None)
         c.addNotificationRequest_withCompletionHandler_(req, None)
     except Exception:
@@ -132,11 +145,13 @@ def paste_text(text):
         return
 
     chunks = _split_chunks(text, CHUNK_SIZE)
-    log(f"Paste ({len(text)} chars, {len(text.encode('utf-8'))} bytes, {len(chunks)} chunk(s)): {repr(text[:120])}")
+    # don't log the transcript itself — it may contain sensitive speech
+    log(f"Paste ({len(text)} chars, {len(text.encode('utf-8'))} bytes, {len(chunks)} chunk(s))")
 
     try:
         from AppKit import NSPasteboard
         pb = NSPasteboard.generalPasteboard()
+        saved = pb.stringForType_("public.utf8-plain-text")
 
         for i, chunk in enumerate(chunks):
             pb.clearContents()
@@ -145,6 +160,12 @@ def paste_text(text):
             _cmd_v()
             if i < len(chunks) - 1:
                 time.sleep(0.15)
+
+        if saved is not None:
+            # let the last Cmd+V read the pasteboard before restoring
+            time.sleep(0.5)
+            pb.clearContents()
+            pb.setString_forType_(saved, "public.utf8-plain-text")
 
         log("Paste: OK")
     except Exception as ex:
@@ -166,6 +187,7 @@ class Lori:
         self._lock = threading.Lock()
         self._stream = None
         self._last_tap = 0.0
+        self._auto_stop_timer = None
 
         try:
             dev = sd.query_devices(kind='input')
@@ -186,7 +208,6 @@ class Lori:
         log("Ready. Waiting for trigger.")
 
     def _cleanup_old_clips(self):
-        import datetime
         CLIPS_DIR.mkdir(parents=True, exist_ok=True)
         cutoff = time.time() - 7 * 24 * 3600
         for f in CLIPS_DIR.glob("voice-clipped-*.wav"):
@@ -216,6 +237,9 @@ class Lori:
 
         if action == "stop":
             log("→ stop")
+            if self._auto_stop_timer is not None:
+                self._auto_stop_timer.cancel()
+                self._auto_stop_timer = None
             # notify("⏹", "Transcribing...")  # disabled: indicator is enough
             try:
                 stream_to_stop.stop()
@@ -232,12 +256,12 @@ class Lori:
 
         elif action == "start":
             log("→ start")
-            with self._lock:
-                self._start_recording()
+            self._start_recording()
 
     def _start_recording(self):
-        self.state = STATE_RECORDING
-        self.audio_data = []
+        with self._lock:
+            self.state = STATE_RECORDING
+            self.audio_data = []
 
         def callback(indata, frames, time_info, status):
             with self._lock:
@@ -245,18 +269,34 @@ class Lori:
                     self.audio_data.append(indata.copy())
 
         try:
-            self._stream = sd.InputStream(
+            # stream is created/started outside the lock: the audio callback
+            # takes the same lock, holding it here is deadlock-prone
+            stream = sd.InputStream(
                 samplerate=self.config["sample_rate"],
                 channels=1,
                 dtype="float32",
                 callback=callback,
             )
-            self._stream.start()
+            stream.start()
+            self._stream = stream
+            limit = self.config.get("max_recording_seconds", 600)
+            self._auto_stop_timer = threading.Timer(limit, self._auto_stop)
+            self._auto_stop_timer.daemon = True
+            self._auto_stop_timer.start()
             log("Recording started")
             # notify("🎙 Recording", "Speak. Press the button to stop")  # disabled: indicator is enough
         except Exception as e:
             log(f"Recording error: {e}")
-            self.state = STATE_IDLE
+            with self._lock:
+                self.state = STATE_IDLE
+
+    def _auto_stop(self):
+        with self._lock:
+            if self.state != STATE_RECORDING:
+                return
+        log(f"Auto-stop: recording hit {self.config.get('max_recording_seconds', 600)}s limit")
+        self._last_tap = 0.0  # bypass debounce
+        self.toggle()
 
     def _transcribe(self, audio_data):
         log("Transcribing...")
@@ -266,13 +306,12 @@ class Lori:
             log(f"Audio: {duration:.1f}s")
             max_vol = float(np.abs(audio).max())
             log(f"Volume: max={max_vol:.3f}")
-            if max_vol < self.config.get("min_volume", 0.02):
+            if max_vol < self.config.get("min_volume", 0.03):
                 log("Too quiet")
                 # notify("Lori", "Too quiet")  # disabled: indicator is enough
                 return
             # normalize audio to [-1, 1] to protect against clipping/overload
             if max_vol > 1.0:
-                import datetime
                 # normalize by 99th percentile, not peak — otherwise one clap/click
                 # makes all speech inaudible after normalization
                 p99 = float(np.percentile(np.abs(audio), 99))
@@ -288,7 +327,8 @@ class Lori:
                 language=self._lang,
             )
             text = result["text"].strip()
-            log(f"Text: '{text}'")
+            # length only — the transcript itself may contain sensitive speech
+            log(f"Text: {len(text)} chars")
             if text:
                 paste_text(text)
                 # notify("✅", text[:70])  # disabled: indicator is enough
@@ -308,21 +348,23 @@ _lock_fh = None
 
 def acquire_lock():
     global _lock_fh
-    _lock_fh = open("/tmp/lori.lock", "w")
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(RUNTIME_DIR, 0o700)
+    _lock_fh = open(LOCK_FILE, "a")
     try:
         fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except IOError:
         sys.exit(0)
 
 
-def watch_toggle_file(vi):
+def watch_toggle_file(lori):
     while True:
-        if os.path.exists(TOGGLE_FILE):
+        if TOGGLE_FILE.exists():
             try:
-                os.remove(TOGGLE_FILE)
+                TOGGLE_FILE.unlink()
             except Exception:
                 pass
-            vi.toggle()
+            lori.toggle()
         time.sleep(0.1)
 
 
@@ -341,13 +383,13 @@ def main():
 
     while True:
         try:
-            vi = Lori(config)
+            lori = Lori(config)
             break
         except Exception as e:
             log(f"Load error: {e}, retrying in 5s")
             time.sleep(5)
 
-    threading.Thread(target=watch_toggle_file, args=(vi,), daemon=True).start()
+    threading.Thread(target=watch_toggle_file, args=(lori,), daemon=True).start()
 
     if app is not None:
         try:
