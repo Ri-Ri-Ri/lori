@@ -35,6 +35,8 @@ MAX_LOG_SIZE = 1_000_000  # rotate to lori.log.1 beyond this
 # symlink-attack the lock file — keep runtime files in a private per-user dir
 RUNTIME_DIR = Path.home() / "Library" / "Application Support" / "lori"
 TOGGLE_FILE = RUNTIME_DIR / "toggle"
+REPASTE_FILE = RUNTIME_DIR / "repaste"
+LAST_TRANSCRIPT_FILE = RUNTIME_DIR / "last-transcript.txt"
 LOCK_FILE = RUNTIME_DIR / "lori.lock"
 
 DEFAULT_CONFIG = {
@@ -171,6 +173,17 @@ def _restore_pasteboard(pb, saved):
         pb.writeObjects_(items)
 
 
+def save_last_transcript(text):
+    # safety net: paste can land in the wrong window and the original clipboard
+    # gets restored right after — without this file the transcript is lost forever;
+    # only the latest one is kept, 0600 in the private 0700 runtime dir
+    try:
+        LAST_TRANSCRIPT_FILE.write_text(text)
+        os.chmod(LAST_TRANSCRIPT_FILE, 0o600)
+    except Exception as e:
+        log(f"Last transcript save error: {e}")
+
+
 def paste_text(text):
     # join lines (each \n in terminal = Enter → shell executes line)
     text = " ".join(text.splitlines()).strip()
@@ -179,6 +192,8 @@ def paste_text(text):
     if not text:
         log("Paste: empty text after sanitize")
         return
+
+    save_last_transcript(text)
 
     chunks = _split_chunks(text, CHUNK_SIZE)
     # don't log the transcript itself — it may contain sensitive speech
@@ -335,6 +350,27 @@ class Lori:
         self._last_tap = 0.0  # bypass debounce
         self.toggle()
 
+    def repaste(self):
+        # re-paste the last transcript into the currently focused window
+        # (recovery for when the original paste went to the wrong window)
+        with self._lock:
+            if self.state != STATE_IDLE:
+                return
+        try:
+            text = LAST_TRANSCRIPT_FILE.read_text().strip()
+        except FileNotFoundError:
+            log("Repaste: no saved transcript")
+            notify("Lori", "No saved transcript")
+            return
+        except Exception as e:
+            log(f"Repaste read error: {e}")
+            return
+        if not text:
+            log("Repaste: saved transcript is empty")
+            return
+        log("Repaste: pasting last transcript")
+        threading.Thread(target=paste_text, args=(text,), daemon=True).start()
+
     def _transcribe(self, audio_data):
         log("Transcribing...")
         try:
@@ -409,6 +445,12 @@ def watch_toggle_file(lori):
             except Exception:
                 pass
             lori.toggle()
+        if REPASTE_FILE.exists():
+            try:
+                REPASTE_FILE.unlink()
+            except Exception:
+                pass
+            lori.repaste()
         time.sleep(0.1)
 
 

@@ -89,6 +89,21 @@ Second press — stop + transcribe + paste.
 
 ---
 
+## Repaste — recover the last transcript
+
+If the paste landed in the wrong window (wrong focus), the text is not lost:
+the last transcript is always saved to `~/Library/Application Support/lori/last-transcript.txt`
+(mode 0600, overwritten on each dictation). Focus the right window and run:
+
+```
+bash ~/.lori/repaste.sh
+```
+
+Lori pastes the last transcript again. Optionally bind it to its own key in
+Shortcuts.app the same way as `toggle.sh`.
+
+---
+
 ## Files
 
 After installation:
@@ -98,6 +113,7 @@ After installation:
 ├── lori.py              — main script
 ├── config.json          — settings
 ├── toggle.sh            — trigger (called from Shortcuts)
+├── repaste.sh           — re-paste the last transcript (recovery after wrong-window paste)
 ├── models/              — mlx-whisper model cache (HF_HOME), ~1.4 GB, downloaded once
 └── lori.log             — events log (rotates to lori.log.1 at 1 MB; transcripts are not logged)
 
@@ -106,6 +122,8 @@ After installation:
 
 ~/Library/Application Support/lori/
 ├── toggle               — trigger file (created by toggle.sh, consumed by lori.py)
+├── repaste              — trigger file (created by repaste.sh, consumed by lori.py)
+├── last-transcript.txt  — last transcript (mode 0600), source for repaste
 └── lori.lock            — single-instance lock
 ```
 
