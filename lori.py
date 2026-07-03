@@ -381,7 +381,8 @@ class Lori:
             log(f"Volume: max={max_vol:.3f}")
             if max_vol < self.config.get("min_volume", 0.03):
                 log("Too quiet")
-                # notify("Lori", "Too quiet")  # disabled: indicator is enough
+                # this notify stays on: a silently dropped recording looks like a hang
+                notify("🔇 Lori", "Too quiet — recording not transcribed")
                 return
             # normalize audio to [-1, 1] to protect against clipping/overload
             if max_vol > 1.0:
