@@ -3,6 +3,7 @@ import datetime
 import fcntl
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -107,6 +108,14 @@ def notify(title, message=""):
 
 
 CHUNK_SIZE = 400  # Cursor/xterm.js hangs on large clipboard pastes
+
+# whisper's classic failure on unclear audio: a short phrase looped dozens of
+# times; real dictation almost never repeats one phrase 6+ times in a row
+_REPEAT_LOOP = re.compile(r"((?:\S+\s){1,12}?)(?:\1){5,}")
+
+
+def collapse_repeat_loops(text):
+    return _REPEAT_LOOP.sub(lambda m: m.group(1) * 3, text)
 
 
 def _split_chunks(text, size):
@@ -353,8 +362,15 @@ class Lori:
                 audio,
                 path_or_hf_repo=MLX_WHISPER_MODEL,
                 language=self._lang,
+                # decoding each 30s window independently prevents a hallucinated
+                # loop from feeding itself into the next window
+                condition_on_previous_text=False,
             )
             text = result["text"].strip()
+            cleaned = collapse_repeat_loops(text)
+            if cleaned != text:
+                log(f"Hallucination loop collapsed: {len(text)} -> {len(cleaned)} chars")
+                text = cleaned
             # length only — the transcript itself may contain sensitive speech
             log(f"Text: {len(text)} chars")
             if text:
