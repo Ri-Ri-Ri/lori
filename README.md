@@ -4,6 +4,8 @@
 
 Press a button — speak — press again. Text is pasted wherever your cursor is.
 
+![Demo](assets/lori-demo.gif)
+
 **Transcription is fully local.** Nothing leaves your machine. No API key needed.
 
 ---

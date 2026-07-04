@@ -109,6 +109,36 @@ def notify(title, message=""):
         pass
 
 
+# one fixed identifier: Recording replaces itself with Transcribing and is
+# removed after the paste, so dictations don't pile up in Notification Center
+_STATUS_UID = "lori-status"
+
+
+def notify_status(title, message=""):
+    log(f"notify: {title} | {message} | {_focus_mode_status()}")
+    try:
+        import UserNotifications as UN
+        c = UN.UNUserNotificationCenter.currentNotificationCenter()
+        content = UN.UNMutableNotificationContent.alloc().init()
+        content.setTitle_(title)
+        content.setBody_(message or " ")
+        content.setInterruptionLevel_(2)
+        req = UN.UNNotificationRequest.requestWithIdentifier_content_trigger_(_STATUS_UID, content, None)
+        c.addNotificationRequest_withCompletionHandler_(req, None)
+    except Exception:
+        pass
+
+
+def clear_status():
+    try:
+        import UserNotifications as UN
+        c = UN.UNUserNotificationCenter.currentNotificationCenter()
+        c.removePendingNotificationRequestsWithIdentifiers_([_STATUS_UID])
+        c.removeDeliveredNotificationsWithIdentifiers_([_STATUS_UID])
+    except Exception:
+        pass
+
+
 CHUNK_SIZE = 400  # Cursor/xterm.js hangs on large clipboard pastes
 
 # whisper's classic failure on unclear audio: a short phrase looped dozens of
@@ -318,7 +348,7 @@ class Lori:
             if self._auto_stop_timer is not None:
                 self._auto_stop_timer.cancel()
                 self._auto_stop_timer = None
-            # notify("⏹", "Transcribing...")  # disabled: indicator is enough
+            notify_status("Lori", "Transcribing…")
             try:
                 stream_to_stop.stop()
                 stream_to_stop.close()
@@ -329,6 +359,7 @@ class Lori:
                     target=self._transcribe, args=(audio_to_transcribe,), daemon=True
                 ).start()
             else:
+                clear_status()
                 with self._lock:
                     self.state = STATE_IDLE
 
@@ -362,7 +393,7 @@ class Lori:
             self._auto_stop_timer.daemon = True
             self._auto_stop_timer.start()
             log("Recording started")
-            # notify("🎙 Recording", "Speak. Press the button to stop")  # disabled: indicator is enough
+            notify_status("🎙 Lori", "Recording…")
         except Exception as e:
             log(f"Recording error: {e}")
             with self._lock:
@@ -441,13 +472,12 @@ class Lori:
             log(f"Text: {len(text)} chars")
             if text:
                 paste_text(text)
-                # notify("✅", text[:70])  # disabled: indicator is enough
             else:
-                pass  # notify("Lori", "Silence")  # disabled: indicator is enough
+                log("Silence (no text)")
         except Exception as e:
             log(f"Transcription error: {e}")
-            # notify("❌ Error", str(e)[:100])  # disabled: indicator is enough
         finally:
+            clear_status()
             with self._lock:
                 self.state = STATE_IDLE
             log("Done, waiting for trigger...")
