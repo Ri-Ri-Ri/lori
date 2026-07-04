@@ -151,6 +151,7 @@ After installation:
 | `min_volume` | `0.03` | Silence threshold. If quiet speech isn't transcribed — lower this value. |
 | `debounce_seconds` | `0.3` | Protection against double-tap. |
 | `max_recording_seconds` | `600` | Auto-stop for a forgotten recording (audio is buffered in RAM while recording). |
+| `status_notifications` | `true` | Show the Recording → Transcribing banner (one replaceable notification, removed after the paste). Set to `false` to dictate silently. |
 
 > **Auto-detect:** set `"language": "auto"` and Whisper will detect the language on every recording. Useful if you switch between languages often, but adds ~0.5s to transcription time.
 

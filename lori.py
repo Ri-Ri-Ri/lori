@@ -112,9 +112,12 @@ def notify(title, message=""):
 # one fixed identifier: Recording replaces itself with Transcribing and is
 # removed after the paste, so dictations don't pile up in Notification Center
 _STATUS_UID = "lori-status"
+STATUS_NOTIFICATIONS = True  # config "status_notifications", set in main()
 
 
 def notify_status(title, message=""):
+    if not STATUS_NOTIFICATIONS:
+        return
     log(f"notify: {title} | {message} | {_focus_mode_status()}")
     try:
         import UserNotifications as UN
@@ -130,6 +133,8 @@ def notify_status(title, message=""):
 
 
 def clear_status():
+    if not STATUS_NOTIFICATIONS:
+        return
     try:
         import UserNotifications as UN
         c = UN.UNUserNotificationCenter.currentNotificationCenter()
@@ -526,6 +531,8 @@ def main():
         app = None
 
     config = load_config()
+    global STATUS_NOTIFICATIONS
+    STATUS_NOTIFICATIONS = config.get("status_notifications", True)
 
     while True:
         try:
